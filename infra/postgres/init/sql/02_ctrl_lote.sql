@@ -1,0 +1,49 @@
+-- ============================================================================
+-- Linha 2 (observabilidade): controle por LOTE. O lote é a unidade de entrega, de carga e de registro.
+--
+--   RECEBIDO -> CUSTODIADO -> CARREGADO -> PROCESSADO
+--                                       -> INCOMPLETO   chegou menos (ou mais) do que a origem declarou
+--   qualquer etapa                      -> ERRO         falha de processo
+--
+-- Execução verde no Airflow não é carga saudável: quem informa a saúde é esta tabela.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ctrl.lote (
+    lote_id              bigserial   PRIMARY KEY,
+    nome_lote            text        NOT NULL UNIQUE,
+    status               text        NOT NULL DEFAULT 'RECEBIDO'
+                         CHECK (status IN ('RECEBIDO', 'CUSTODIADO', 'CARREGADO', 'PROCESSADO', 'INCOMPLETO', 'ERRO')),
+    -- o que a ORIGEM declarou em controle_lote.json (NULL = lote veio sem arquivo de controle)
+    declarado_arquivos   int,
+    declarado_nfe        int,
+    declarado_eventos    int,
+    declarado_vnf        numeric(18,2),
+    -- o que o pipeline contou em cada fronteira
+    qtd_arquivos         int,           -- arquivos .xml encontrados na pasta do lote
+    qtd_custodiados      int,           -- objetos novos gravados no bucket
+    qtd_ja_custodiados   int,           -- reenvio idêntico: mesmo objeto já estava no bucket
+    qtd_bronze           int,           -- linhas inseridas na bronze
+    qtd_validos          int,           -- documentos que chegaram à silver
+    qtd_quarentena       int,           -- documentos barrados, com motivo
+    recebido_em          timestamptz NOT NULL DEFAULT now(),
+    custodiado_em        timestamptz,
+    carregado_em         timestamptz,
+    processado_em        timestamptz,
+    dag_run_id           text,
+    mensagem             text
+);
+CREATE INDEX IF NOT EXISTS ix_lote_status ON ctrl.lote (status);
+
+COMMENT ON TABLE  ctrl.lote IS 'Controle de carga por lote (linha 2). 1 linha por lote entregue pela origem';
+COMMENT ON COLUMN ctrl.lote.declarado_vnf IS 'Soma de vNF declarada pela origem: ponto de partida da conferência dos números';
+
+-- Leitura pronta para o painel e para o runbook
+-- DROP + CREATE: a view usa l.*, e CREATE OR REPLACE falha quando a tabela ganha coluna
+DROP VIEW IF EXISTS ctrl.v_lote;
+CREATE VIEW ctrl.v_lote AS
+SELECT l.*,
+       (l.declarado_arquivos IS NOT NULL AND l.qtd_arquivos = l.declarado_arquivos) AS entrega_completa,
+       extract(epoch FROM l.custodiado_em - l.recebido_em)::int                      AS seg_custodia,
+       extract(epoch FROM l.carregado_em  - l.custodiado_em)::int                    AS seg_bronze,
+       extract(epoch FROM l.processado_em - l.carregado_em)::int                     AS seg_transformacao,
+       extract(epoch FROM coalesce(l.processado_em, now()) - l.recebido_em)::int     AS seg_total
+FROM ctrl.lote l;

@@ -1,19 +1,24 @@
 # Arquitetura
 
-Desenho alvo. Nada aqui está implementado ainda; os nomes de objetos são a especificação dos marcos 1 a 6.
+Desenho alvo. O ambiente e as tabelas de controle existem desde o marco 1; o restante é a especificação dos
+marcos 2 a 7.
 
 ## 1. Ambiente
 
-Um `docker compose` próprio (projeto `nfe_onprem`), com as imagens e versões do
-[datalabs](https://github.com/engrodrigoa/datalabs/blob/master/docker-compose.yml) e portas diferentes, para
-poder rodar ao lado dele (decisão D001).
+Um `docker compose` próprio (projeto `nfe_onprem`), com versões fixas e portas padrão. Não roda ao mesmo tempo
+que o datalabs (decisões D001 e D011).
 
-| Serviço | Versão (a do datalabs) | Papel aqui |
-|---|---|---|
-| `postgres` | Postgres 15 (o datalabs usa a imagem com pgvector; a extensão não é necessária aqui) | bronze, silver, gold, controle e metadados do Airflow (banco separado) |
-| `minio` | Silo, fixado por tag e digest | custódia do XML bruto |
-| `airflow-apiserver`, `airflow-scheduler`, `airflow-dag-processor`, `airflow-triggerer` | Airflow 3.3.2 | orquestração |
-| `grafana` | Grafana 12.0.0 | dashboard de 1 página |
+| Serviço | Versão | Porta | Papel |
+|---|---|---|---|
+| `postgres` | Postgres 15 | 5432 | bronze, silver, gold, controle e metadados do Airflow (banco `airflow`, separado) |
+| `minio` | Silo, fixado por tag e digest (o mesmo do datalabs) | 9000 (API S3), 9001 (console) | custódia do XML bruto |
+| `airflow-apiserver`, `airflow-scheduler`, `airflow-dag-processor`, `airflow-triggerer` | Airflow 3.4.0, Python 3.12, LocalExecutor | 8080 | orquestração |
+| `airflow-init` | mesma imagem | — | migra os metadados, cria o admin e prepara o bucket da custódia; roda e termina |
+| `grafana` | Grafana 12.0.0 | 3000 | dashboard de 1 página |
+| `adminer` (perfil `tools`) | 4.8.1 | 8081 | consulta ao banco pelo navegador |
+
+O dbt (dbt-core 1.11.15, dbt-postgres 1.11.0) fica em um venv isolado dentro da imagem do Airflow e é chamado
+por linha de comando (D012).
 
 Loki, Promtail, Prometheus e statsd-exporter, que o datalabs usa para logs e métricas de plataforma, ficam
 fora do MVP. As linhas 2 e 3 deste projeto são respondidas por tabelas de controle no Postgres. Entram depois,
@@ -25,7 +30,7 @@ como perfil opcional do compose, se a operação pedir.
 |---|---|---|---|
 | **Origem** | pasta `datasource/nfe/` | `inbox/`, `processando/<lote>/`, `processados/<lote>/` | passagem; nada é lido daqui depois da custódia |
 | **Raw (custódia)** | object store | bucket `nfe-raw` | imutável; versionado; retenção; a cópia com valor legal |
-| **Bronze** | Postgres `bronze` | `nfe_xml`, `nfe_evento_xml` | XML bruto, 1 linha por arquivo, só INSERT; reconstruível do raw |
+| **Bronze** | Postgres `bronze` | `documento_xml` | XML bruto de notas e eventos, 1 linha por arquivo, só INSERT; reconstruível do raw (D013) |
 | **Silver** | Postgres `silver` | `nfe_nota`, `nfe_item`, `nfe_evento`, `nfe_situacao`, `nfe_quarentena` | tipada, com contrato; 1 linha por chave |
 | **Gold** | Postgres `gold` | dimensões, `ft_nfe_item`, `ft_nfe_documento`, `ag_fiscal_mensal` | modelo dimensional para consumo |
 | **Controle** | Postgres `ctrl` e `custodia` | ver seção 4 | o que as linhas 2 e 3 gravam |
@@ -35,7 +40,7 @@ como perfil opcional do compose, se a operação pedir.
 A parte que não existe nos projetos anteriores e que justifica este.
 
 **Chave do objeto.** `<tipo>/<cnpj_emitente>/<aaaa>/<mm>/<chave_acesso>-<sha256[:12]>.xml`, com `tipo` em
-`nfe` ou `evento`. O trecho do hash no nome impede que um reenvio com conteúdo diferente sobrescreva o
+`nfe` ou `evento`. Arquivo ilegível, do qual não se extrai chave, vai para `invalido/<lote>/`. O trecho do hash no nome impede que um reenvio com conteúdo diferente sobrescreva o
 anterior: são dois objetos, e o inventário mostra os dois.
 
 **Inventário.** `custodia.documento`, 1 linha por objeto gravado:

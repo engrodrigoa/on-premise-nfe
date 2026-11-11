@@ -1,0 +1,242 @@
+# on-premise-nfe: custódia e pipeline de NF-e de saída
+#
+#   make up                                   sobe tudo (cria o .env na primeira vez)
+#   docker compose --profile tools up -d      + Adminer (http://localhost:8081)
+#
+# Portas padrão (decisão D011): este stack não roda ao mesmo tempo que o datalabs.
+# Imagens com versão fixa: o projeto precisa subir igual daqui a um ano.
+
+name: nfe_onprem
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+  image: nfe_onprem/airflow:3.4.0-local
+  user: "${AIRFLOW_UID:-1000}:0"
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${DB_USER}:${DB_PASSWORD}@postgres:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Sao_Paulo
+    # Airflow 3: a task não acessa o banco de metadados. Ela fala com a Execution API do api-server,
+    # autenticada por JWT. O segredo precisa ser O MESMO em todos os serviços (make env gera).
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__API_AUTH__JWT_ISSUER: nfe_onprem
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:?faltando no .env, rode make env}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?faltando no .env, rode make env}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+    # usuário admin do .env, criado pelo airflow-init
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__API__EXPOSE_CONFIG: "false"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # FileSensor da dag_nfe_saida (marco 3): `airflow db migrate` não cria as conexões padrão
+    AIRFLOW_CONN_FS_DEFAULT: '{"conn_type": "fs", "extra": {"path": "/"}}'
+    OPENLINEAGE_DISABLED: "true"
+    PYTHONPATH: /opt/airflow
+    # --- configuração lida por pipelines/commons/config.py (visão de dentro da rede do compose)
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_USER: ${DB_USER}
+    DB_PASSWORD: ${DB_PASSWORD}
+    DB_DB: ${DB_DB}
+    S3_ENDPOINT: http://minio:9000
+    S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+    S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    NFE_BUCKET_RAW: ${NFE_BUCKET_RAW:-nfe-raw}
+    CUSTODIA_LOCK_MODE: ${CUSTODIA_LOCK_MODE:-GOVERNANCE}
+    CUSTODIA_RETENCAO_DIAS: ${CUSTODIA_RETENCAO_DIAS:-2190}
+    NFE_DIR_ORIGEM: /mnt/datasource/nfe
+    # --- dbt: venv isolado; target e logs em volume, fora do código
+    DBT_BIN: /opt/airflow/dbt_venv/bin/dbt
+    DBT_PROJECT_DIR: /opt/airflow/dbt
+    DBT_PROFILES_DIR: /opt/airflow/dbt
+    DBT_TARGET_PATH: /opt/airflow/dbt_vol/target
+    DBT_LOG_PATH: /opt/airflow/dbt_vol/logs
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./pipelines:/opt/airflow/pipelines:ro
+    - ./gerador:/opt/airflow/gerador:ro
+    - ./dbt:/opt/airflow/dbt
+    - dbt_vol:/opt/airflow/dbt_vol
+    - ./datasource:/mnt/datasource
+  depends_on: &airflow-depends
+    postgres:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+
+services:
+  # ------------------------------------------------------------------ armazenamento
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DB}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio:
+    # Silo: fork comunitário do MinIO (mesma API S3, mesmo CLI). Mesma tag e digest do datalabs.
+    # É a CUSTÓDIA do XML bruto: bucket com versionamento e bloqueio de objeto (decisão D003).
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_UPDATE: "off"
+    ports:
+      - "9000:9000"   # API S3
+      - "9001:9001"   # console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------ orquestração
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    user: "0:0"
+    command:
+      - -c
+      - |
+        set -e
+        mkdir -p /opt/airflow/logs /mnt/datasource/nfe/inbox /mnt/datasource/nfe/processando \
+                 /mnt/datasource/nfe/processados /opt/airflow/dbt_vol/target /opt/airflow/dbt_vol/logs
+        chown -R "${AIRFLOW_UID:-1000}:0" /opt/airflow/logs /mnt/datasource /opt/airflow/dbt_vol
+        # migra o banco de metadados e cria o admin (comportamento do entrypoint oficial)
+        /entrypoint airflow version
+        # bucket da custódia: versionamento + bloqueio de objeto. Idempotente; o resultado fica no log.
+        python -m pipelines.custodia.setup_bucket
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+      _AIRFLOW_WWW_USER_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@example.org}
+    restart: "no"
+
+  # O Airflow 3 separa o antigo par webserver + scheduler em quatro processos:
+  #   api-server     UI + API REST v2 + Execution API (a única porta das tasks para o banco de metadados)
+  #   scheduler      agenda as execuções e roda as tasks (LocalExecutor)
+  #   dag-processor  lê os arquivos de DAG
+  #   triggerer      roda o que é deferrable (sensores assíncronos)
+  airflow-apiserver:
+    <<: *airflow-common
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+      # com LocalExecutor as tasks rodam neste container e cada uma chama a Execution API
+      airflow-apiserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------ dashboard
+  grafana:
+    image: grafana/grafana:12.0.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_DEFAULT_THEME: light
+      # role somente leitura criada por infra/postgres/init/00_bootstrap.sh
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+      DB_DB: ${DB_DB}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------ opcional (profile "tools")
+  adminer:
+    image: adminer:4.8.1
+    profiles: ["tools"]
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+
+# Dado com estado fica em volume Docker. Bind mount só para código e para a pasta de rede simulada.
+# `make clean` apaga estes volumes, INCLUSIVE a custódia.
+volumes:
+  pg_data:
+  minio_data:
+  dbt_vol:
+  grafana_data:

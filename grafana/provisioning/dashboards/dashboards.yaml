@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: nfe
+    folder: NF-e
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false   # painel como código: a fonte é o repositório
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,14 @@
+name: nfe_onprem
+version: "0.1.0"
+config-version: 2
+profile: nfe_onprem
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+
+# target e logs ficam fora do código: DBT_TARGET_PATH e DBT_LOG_PATH (docker-compose.yml)
+clean-targets: ["target", "dbt_packages"]
+
+# Os modelos entram nos marcos 4 (silver) e 5 (gold).

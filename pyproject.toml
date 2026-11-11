@@ -1,0 +1,21 @@
+[project]
+name = "on-premise-nfe"
+version = "0.1.0"
+description = "Custódia e pipeline on-premise de NF-e de saída (IBS/CBS/IS)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "db: precisa de um Postgres com o bootstrap aplicado (variáveis DB_*)",
+    "airflow: precisa do Airflow instalado",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["dbt/dbt_packages"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82", "F401", "F841", "AIR3"]
