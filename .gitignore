@@ -1,0 +1,21 @@
+# segredos: só o .env.example entra no Git
+.env
+.env.*
+!.env.example
+
+# massa gerada e pasta de rede simulada
+datasource/
+data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# dbt
+target/
+dbt_packages/
+logs/
+
+.DS_Store
+Thumbs.db
