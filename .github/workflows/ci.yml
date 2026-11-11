@@ -50,7 +50,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12", cache: pip}
       - run: pip install -r requirements-dev.txt
-      - name: bootstrap (duas vezes: precisa ser idempotente)
+      - name: bootstrap duas vezes (precisa ser idempotente)
         run: |
           for i in 1 2; do
             PGHOST=localhost POSTGRES_USER=nfe POSTGRES_DB=nfe GRAFANA_DB_PASSWORD=ro \

@@ -58,3 +58,8 @@ def test_env_example_cobre_as_variaveis_do_compose():
     definidas = {linha.split("=", 1)[0] for linha in (RAIZ / ".env.example").read_text(encoding="utf-8").splitlines()
                  if linha and not linha.startswith("#") and "=" in linha}
     assert usadas - definidas == set(), f"variáveis do compose ausentes no .env.example: {usadas - definidas}"
+
+
+def test_workflow_do_ci_e_yaml_valido():
+    ci = yaml.safe_load((RAIZ / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    assert set(ci["jobs"]) == {"lint-e-unitarios", "compose", "banco", "airflow-dags"}
