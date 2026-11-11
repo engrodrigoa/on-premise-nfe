@@ -127,3 +127,15 @@ custódia ele é guardado do mesmo jeito, sob o prefixo `invalido/`.
 **Consequência:** nenhum arquivo some entre a pasta e a bronze, e a contagem fecha sem tabela de rejeitados à
 parte. Quem decide o destino do arquivo malformado é a silver (quarentena, motivo `xml_corrompido`).
 
+## D014 — Gerador com estado, um lote por dia, e romaneio com sha256 no arquivo de controle
+
+**Contexto:** a origem precisa produzir o que um ERP real produz: numeração sem buracos, devolução que aponta
+para uma venda existente e cancelamento que chega dias depois. Um gerador sem memória não consegue. Além
+disso, contar arquivos e somar `vNF` (D005) não prova que cada arquivo chegou como saiu.
+**Decisão:** o gerador guarda estado em `gerador_estado.json` e entrega um lote por dia, em pasta própria,
+publicada na inbox só quando completa. O `controle_lote.json` traz, além dos totais, um romaneio com o sha256
+de cada arquivo na saída do ERP. O gabarito das anomalias fica em outra pasta, que o pipeline não lê.
+**Consequência:** a custódia compara o sha256 recebido com o declarado e detecta arquivo truncado antes de
+qualquer parse. O estado torna a geração sequencial: perder o arquivo de estado exige recomeçar a massa (o
+gerador recusa gravar por cima de um lote existente).
+

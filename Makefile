@@ -4,7 +4,10 @@ COMPOSE := docker compose
 AF := $(COMPOSE) exec -T airflow-scheduler
 PG := $(COMPOSE) exec -T postgres
 
-.PHONY: help env creds up down clean ps logs urls smoke teste-custodia db-bootstrap psql test lint
+.PHONY: help env creds up down clean ps logs urls smoke teste-custodia gerar gerar-sujo db-bootstrap psql test lint
+
+DIAS ?= 1
+ARGS ?=
 
 help: ## lista os alvos
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -55,6 +58,12 @@ smoke: ## marco 1: confere Postgres, bucket da custódia e dbt por dentro do Air
 
 teste-custodia: ## marco 1 (D003): versionamento e bloqueio de objeto no object store real
 	$(AF) python -m pipelines.custodia.teste_lock
+
+gerar: ## ERP simulado: entrega os próximos DIAS lotes (DIAS=1). Extra: ARGS="--incompleto 40"
+	$(AF) python -m gerador.gen_nfe --dias $(DIAS) $(ARGS)
+
+gerar-sujo: ## idem, com anomalias nas taxas padrão e gabarito em datasource/nfe/gabarito
+	$(AF) python -m gerador.gen_nfe --dias $(DIAS) --sujo $(ARGS)
 
 db-bootstrap: ## reaplica o DDL em um banco existente (idempotente)
 	$(PG) bash /docker-entrypoint-initdb.d/00_bootstrap.sh
