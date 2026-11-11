@@ -139,3 +139,14 @@ de cada arquivo na saída do ERP. O gabarito das anomalias fica em outra pasta, 
 qualquer parse. O estado torna a geração sequencial: perder o arquivo de estado exige recomeçar a massa (o
 gerador recusa gravar por cima de um lote existente).
 
+## D015 — Portas do object store configuráveis no host
+
+**Contexto:** na primeira subida na máquina do dono (Windows + Docker Desktop + WSL2), o `make up` falhou ao
+publicar a 9001: o Windows reservava essa porta (`netsh interface ipv4 show excludedportrange protocol=tcp`
+listava 9001-9001) e o redirecionador de portas do Docker Desktop devolveu erro 500. O erro vem do
+sistema operacional, e a D011 (portas padrão) assumia que elas estariam livres.
+**Decisão:** o lado do host das portas 9000 e 9001 vem de `MINIO_API_PORT` e `MINIO_CONSOLE_PORT` no `.env`, com
+os padrões de antes. A D011 continua valendo como padrão; a variável é a saída quando o Windows reserva a porta.
+**Consequência:** nada muda dentro da rede do compose (`S3_ENDPOINT` segue `http://minio:9000`). Quem já tem
+`.env` precisa acrescentar a variável. O `S3_ENDPOINT` do `.env` (usado só fora do compose) deve acompanhar
+`MINIO_API_PORT` se ela mudar.

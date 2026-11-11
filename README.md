@@ -103,7 +103,7 @@ make gerar ARGS="--incompleto 40"   # um lote entregue com 40 arquivos a menos
 |---|---|
 | Airflow | http://localhost:8080 |
 | Grafana | http://localhost:3000 |
-| Console do object store | http://localhost:9001 |
+| Console do object store | http://localhost:9001 (porta configurável: `MINIO_CONSOLE_PORT` no `.env`) |
 | Postgres | `localhost:5432` |
 
 `make down` para tudo e mantém os dados. `make clean` apaga os volumes, inclusive a custódia.

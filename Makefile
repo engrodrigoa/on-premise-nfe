@@ -30,7 +30,7 @@ creds: ## logins DESTA máquina (lidos do .env)
 	 echo ""; \
 	 echo "  Airflow       http://localhost:8080  $$(v AIRFLOW_ADMIN_USER) / $$(v AIRFLOW_ADMIN_PASSWORD)"; \
 	 echo "  Grafana       http://localhost:3000  $$(v GRAFANA_ADMIN_USER) / $$(v GRAFANA_ADMIN_PASSWORD)"; \
-	 echo "  S3 (console)  http://localhost:9001  $$(v MINIO_ROOT_USER) / $$(v MINIO_ROOT_PASSWORD)"; \
+	 echo "  S3 (console)  http://localhost:$$(v MINIO_CONSOLE_PORT | grep . || echo 9001)  $$(v MINIO_ROOT_USER) / $$(v MINIO_ROOT_PASSWORD)"; \
 	 echo "  Postgres      localhost:$$(v DB_PORT)  $$(v DB_USER) / $$(v DB_PASSWORD)  (banco $$(v DB_DB))"; \
 	 echo ""
 

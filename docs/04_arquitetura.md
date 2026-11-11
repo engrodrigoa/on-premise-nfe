@@ -11,7 +11,7 @@ que o datalabs (decisões D001 e D011).
 | Serviço | Versão | Porta | Papel |
 |---|---|---|---|
 | `postgres` | Postgres 15 | 5432 | bronze, silver, gold, controle e metadados do Airflow (banco `airflow`, separado) |
-| `minio` | Silo, fixado por tag e digest (o mesmo do datalabs) | 9000 (API S3), 9001 (console) | custódia do XML bruto |
+| `minio` | Silo, fixado por tag e digest (o mesmo do datalabs) | 9000 (API S3), 9001 (console); no host, configuráveis (D015) | custódia do XML bruto |
 | `airflow-apiserver`, `airflow-scheduler`, `airflow-dag-processor`, `airflow-triggerer` | Airflow 3.4.0, Python 3.12, LocalExecutor | 8080 | orquestração |
 | `airflow-init` | mesma imagem | — | migra os metadados, cria o admin e prepara o bucket da custódia; roda e termina |
 | `grafana` | Grafana 12.0.0 | 3000 | dashboard de 1 página |
