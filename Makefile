@@ -4,7 +4,7 @@ COMPOSE := docker compose
 AF := $(COMPOSE) exec -T airflow-scheduler
 PG := $(COMPOSE) exec -T postgres
 
-.PHONY: help env creds up down clean ps logs urls smoke teste-custodia gerar gerar-sujo db-bootstrap psql test lint
+.PHONY: help env creds up down clean ps logs urls smoke teste-custodia gerar gerar-sujo carregar carregar-um lotes teste-bronze db-bootstrap psql test lint
 
 DIAS ?= 1
 ARGS ?=
@@ -64,6 +64,22 @@ gerar: ## ERP simulado: entrega os próximos DIAS lotes (DIAS=1). Extra: ARGS="-
 
 gerar-sujo: ## idem, com anomalias nas taxas padrão e gabarito em datasource/nfe/gabarito
 	$(AF) python -m gerador.gen_nfe --dias $(DIAS) --sujo $(ARGS)
+
+carregar: ## marco 3: liga a dag_nfe_saida e dispara; ela encadeia até esvaziar a inbox
+	$(AF) airflow dags unpause dag_nfe_saida
+	$(AF) airflow dags trigger dag_nfe_saida
+
+carregar-um: ## carrega só o lote mais antigo, no terminal, sem encadear (depuração)
+	$(AF) airflow dags test dag_nfe_saida -c '{"encadear": false}'
+
+lotes: ## saúde da carga: os últimos lotes em ctrl.v_lote
+	$(PG) psql -U $$(grep -E '^DB_USER=' .env | cut -d= -f2) -d $$(grep -E '^DB_DB=' .env | cut -d= -f2) -c \
+	  "SELECT nome_lote, status, declarado_arquivos AS decl, qtd_arquivos AS receb, qtd_custodiados AS novos, \
+	          qtd_ja_custodiados AS ja, qtd_faltantes AS falt, qtd_hash_divergente AS hash_div, qtd_bronze AS bronze, \
+	          seg_total, mensagem FROM ctrl.v_lote ORDER BY lote_id DESC LIMIT 15"
+
+teste-bronze: ## marco 3 (D003): a bronze é reconstruída do raw com a mesma contagem e o mesmo conteúdo?
+	$(AF) python -m pipelines.carga.reconstruir_bronze
 
 db-bootstrap: ## reaplica o DDL em um banco existente (idempotente)
 	$(PG) bash /docker-entrypoint-initdb.d/00_bootstrap.sh

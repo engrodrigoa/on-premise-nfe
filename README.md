@@ -99,6 +99,14 @@ make gerar-sujo DIAS=5     # os próximos 5 dias, com anomalias e gabarito
 make gerar ARGS="--incompleto 40"   # um lote entregue com 40 arquivos a menos
 ```
 
+Carga até a bronze (`dag_nfe_saida`, um lote por execução, do mais antigo para o mais novo):
+
+```bash
+make carregar       # liga a DAG e dispara; ela encadeia sozinha até esvaziar a inbox
+make lotes          # saúde da carga por lote (ctrl.v_lote): declarado x recebido x custodiado x bronze
+make teste-bronze   # reconstrói a bronze a partir do raw, numa tabela temporária, e compara
+```
+
 | Serviço | Endereço |
 |---|---|
 | Airflow | http://localhost:8080 |
