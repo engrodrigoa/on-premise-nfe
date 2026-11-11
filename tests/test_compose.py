@@ -36,7 +36,7 @@ def test_portas_padrao():
 
     assert portas("airflow-apiserver") == ["8080:8080"]
     assert portas("grafana") == ["3000:3000"]
-    assert portas("minio") == ["9000:9000", "9001:9001"]
+    assert portas("minio") == ["${MINIO_API_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9001}:9001"]
     assert portas("postgres") == ["${DB_PORT:-5432}:5432"]
 
 
