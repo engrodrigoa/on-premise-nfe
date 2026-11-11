@@ -63,5 +63,10 @@ SELECT l.*,
        extract(epoch FROM l.custodiado_em - l.recebido_em)::int                      AS seg_custodia,
        extract(epoch FROM l.carregado_em  - l.custodiado_em)::int                    AS seg_bronze,
        extract(epoch FROM l.processado_em - l.carregado_em)::int                     AS seg_transformacao,
-       extract(epoch FROM coalesce(l.processado_em, now()) - l.recebido_em)::int     AS seg_total
+       -- lote terminado: duração da carga até a última etapa concluída. Em andamento ou ERRO: há quanto tempo
+       -- está aberto (cresce até alguém agir). Antes usava coalesce(processado_em, now()) e virava a idade do
+       -- lote, porque processado_em só existe a partir da gold.
+       extract(epoch FROM CASE WHEN l.status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO')
+                               THEN greatest(l.custodiado_em, l.carregado_em, l.processado_em)
+                               ELSE now() END - l.recebido_em)::int                  AS seg_total
 FROM ctrl.lote l;

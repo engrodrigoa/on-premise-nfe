@@ -146,6 +146,12 @@ def test_lote_de_ponta_a_ponta_confere_com_o_gabarito(ambiente, conexao_db):
         assert (raiz / "processados" / nome).is_dir() and not (raiz / "processando" / nome).exists()
 
     assert gab.get("arquivo_nao_entregue") == 3          # o 2º lote é o incompleto
+    # seg_total de lote terminado é a duração da carga e não cresce com o relógio
+    with conexao_db.cursor() as cur:
+        cur.execute("SELECT seg_total, extract(epoch FROM carregado_em - recebido_em)::int FROM ctrl.v_lote "
+                    "WHERE nome_lote = ANY(%s)", (nomes,))
+        for seg_total, duracao in cur.fetchall():
+            assert seg_total == duracao
 
 
 def test_retry_nao_duplica_nada(ambiente, conexao_db):
