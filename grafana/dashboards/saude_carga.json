@@ -666,6 +666,17 @@
                   "index": 0
                 }
               }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "histórico curto",
+                  "color": "text",
+                  "index": 1
+                }
+              }
             }
           ],
           "decimals": 0
