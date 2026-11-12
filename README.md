@@ -110,7 +110,7 @@ make teste-bronze   # reconstrói a bronze a partir do raw, numa tabela temporá
 | Serviço | Endereço |
 |---|---|
 | Airflow | http://localhost:8080 |
-| Grafana | http://localhost:3000 |
+| Grafana | http://localhost:3000 (pasta NF-e → "Saúde da carga") |
 | Console do object store | http://localhost:9001 (porta configurável: `MINIO_CONSOLE_PORT` no `.env`) |
 | Postgres | `localhost:5432` |
 
