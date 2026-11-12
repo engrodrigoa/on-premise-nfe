@@ -1,7 +1,7 @@
 {
   "uid": "nfe-saude-carga",
   "title": "NF-e · Saúde da carga",
-  "description": "O pipeline está seguro? Verde nos 5 indicadores e a tabela 'O que exige ação' vazia = sim.",
+  "description": "O pipeline está seguro? Verde nos 5 indicadores do topo e a tabela 'O que exige ação' vazia = sim. A segunda linha é contexto.",
   "tags": [
     "nfe",
     "observabilidade"
@@ -63,7 +63,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "h",
+          "unit": "suffix: h",
           "noValue": "nunca carregou",
           "color": {
             "mode": "thresholds"
@@ -408,6 +408,299 @@
       }
     },
     {
+      "id": 9,
+      "type": "stat",
+      "title": "Lotes no período",
+      "description": "Contexto para os indicadores acima: quantos lotes a origem entregou no período.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS lotes FROM ctrl.lote WHERE $__timeFilter(recebido_em)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "XML recebidos",
+      "description": "Contexto: arquivos recebidos nos lotes do período (inclui reenvios; não inclui os faltantes).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 6,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT coalesce(sum(qtd_arquivos), 0) AS xml FROM ctrl.lote WHERE $__timeFilter(recebido_em)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Lotes sem intervenção",
+      "description": "Dos lotes que terminaram no período (inclusive em ERRO), quantos fecharam sem ninguém precisar agir: CARREGADO, sem hash divergente e sem arquivo fora do romaneio. Substitui a taxa de sucesso do Airflow, que conta como sucesso as execuções em que o sensor não achou lote.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 12,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE status IN ('CARREGADO', 'PROCESSADO')\n                                        AND coalesce(qtd_hash_divergente, 0) = 0\n                                        AND coalesce(qtd_nao_declarados, 0) = 0)\n             / nullif(count(*), 0), 1) AS pct\n  FROM ctrl.lote\n WHERE $__timeFilter(recebido_em) AND status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO', 'ERRO')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "sem lotes",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Volume do último lote",
+      "description": "Volume fora do padrão? Arquivos que a origem declarou no último lote, comparados com a média do mesmo dia da semana nas 4 semanas anteriores (sábado e domingo têm menos nota). Fora de ±50%: perguntar à origem, mesmo com o romaneio fechado. Com menos de 2 semanas de histórico, não há base de comparação.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH l AS (\n  SELECT coalesce(declarado_arquivos, qtd_arquivos) AS qtd, to_date(substr(nome_lote, 6, 10), 'YYYY-MM-DD') AS dia\n    FROM ctrl.lote\n   WHERE status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO') AND nome_lote ~ '^lote_[0-9]{4}-[0-9]{2}-[0-9]{2}$'\n), ultimo AS (SELECT qtd, dia FROM l ORDER BY dia DESC LIMIT 1),\nbase AS (    -- o mesmo dia da semana nas 4 semanas anteriores\n  SELECT avg(l.qtd) AS media, count(*) AS n\n    FROM l, ultimo\n   WHERE l.dia IN (ultimo.dia - 7, ultimo.dia - 14, ultimo.dia - 21, ultimo.dia - 28)\n)\nSELECT CASE WHEN base.n >= 2 THEN round(100.0 * (ultimo.qtd / base.media - 1)) END AS desvio\n  FROM ultimo, base"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "histórico curto",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "range",
+              "options": {
+                "from": -50,
+                "to": 50,
+                "result": {
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "histórico curto",
+                  "color": "text",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
       "id": 6,
       "type": "table",
       "title": "O que exige ação",
@@ -417,10 +710,10 @@
         "uid": "nfe"
       },
       "gridPos": {
-        "h": 8,
+        "h": 6,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 8
       },
       "targets": [
         {
@@ -574,10 +867,10 @@
         "uid": "nfe"
       },
       "gridPos": {
-        "h": 8,
-        "w": 14,
+        "h": 7,
+        "w": 24,
         "x": 0,
-        "y": 13
+        "y": 22
       },
       "targets": [
         {
@@ -589,7 +882,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT l.nome_lote AS lote, d.arquivo, d.tipo,\n       left(d.sha256_declarado, 12) AS sha_declarado, left(d.sha256_recebido, 12) AS sha_recebido,\n       d.registrado_em AS registrado\n  FROM ctrl.lote_divergencia d\n  JOIN ctrl.lote l USING (lote_id)\n WHERE $__timeFilter(d.registrado_em)\n ORDER BY d.registrado_em DESC, d.arquivo\n LIMIT 200"
+          "rawSql": "SELECT l.nome_lote AS lote, d.arquivo, d.tipo,\n       coalesce(left(d.sha256_declarado, 12), '—') AS sha_declarado,\n       coalesce(left(d.sha256_recebido, 12), '—') AS sha_recebido,\n       d.registrado_em AS registrado\n  FROM ctrl.lote_divergencia d\n  JOIN ctrl.lote l USING (lote_id)\n WHERE $__timeFilter(d.registrado_em)\n ORDER BY d.registrado_em DESC, d.arquivo\n LIMIT 200"
         }
       ],
       "fieldConfig": {
@@ -659,6 +952,46 @@
               {
                 "id": "unit",
                 "value": "dateTimeAsLocal"
+              },
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lote"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tipo"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^sha_"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
               }
             ]
           }
@@ -680,16 +1013,16 @@
       "id": 8,
       "type": "timeseries",
       "title": "Duração da carga por lote",
-      "description": "Segundos da reserva do lote até a bronze, por etapa. Serve para ver degradação antes da falha: a agenda roda a cada 10 min, então um lote que passa de 600 s começa a atrasar a fila.",
+      "description": "Segundos da reserva do lote até a bronze, um ponto por lote. Serve para ver degradação antes da falha: a agenda roda a cada 10 min, então um lote acima de 600 s começa a atrasar a fila.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "nfe"
       },
       "gridPos": {
         "h": 8,
-        "w": 10,
-        "x": 14,
-        "y": 13
+        "w": 12,
+        "x": 12,
+        "y": 14
       },
       "targets": [
         {
@@ -701,7 +1034,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT recebido_em AS time, seg_custodia AS \"custódia\", seg_bronze AS \"bronze\"\n  FROM ctrl.v_lote\n WHERE $__timeFilter(recebido_em) AND status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO')\n ORDER BY 1"
+          "rawSql": "SELECT recebido_em AS time, seg_total AS \"duração\"\n  FROM ctrl.v_lote\n WHERE $__timeFilter(recebido_em) AND status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO')\n ORDER BY 1"
         }
       ],
       "fieldConfig": {
@@ -709,18 +1042,13 @@
           "unit": "s",
           "min": 0,
           "color": {
-            "mode": "palette-classic"
+            "mode": "fixed",
+            "fixedColor": "blue"
           },
           "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "lineWidth": 1,
-            "barAlignment": 0,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            },
-            "showPoints": "never",
+            "drawStyle": "points",
+            "pointSize": 7,
+            "showPoints": "always",
             "axisPlacement": "auto",
             "thresholdsStyle": {
               "mode": "off"
@@ -737,6 +1065,107 @@
           }
         },
         "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "XML e lotes por dia de execução",
+      "description": "Volume carregado por dia. Em operação normal é um lote por dia útil; um dia fora da curva é sinal para olhar, mesmo com o romaneio fechado. Numa recarga em massa, tudo cai num dia só.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT date_trunc('day', recebido_em) AS time, sum(qtd_arquivos) AS \"XML\", count(*) AS \"lotes\"\n  FROM ctrl.lote\n WHERE $__timeFilter(recebido_em)\n GROUP BY 1\n ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lotes"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "lotes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "XML"
+            },
+            "properties": [
+              {
+                "id": "custom.axisLabel",
+                "value": "XML"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
