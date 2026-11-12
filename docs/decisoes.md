@@ -127,6 +127,18 @@ custódia ele é guardado do mesmo jeito, sob o prefixo `invalido/`.
 **Consequência:** nenhum arquivo some entre a pasta e a bronze, e a contagem fecha sem tabela de rejeitados à
 parte. Quem decide o destino do arquivo malformado é a silver (quarentena, motivo `xml_corrompido`).
 
+## D014 — Gerador com estado, um lote por dia, e romaneio com sha256 no arquivo de controle
+
+**Contexto:** a origem precisa produzir o que um ERP real produz: numeração sem buracos, devolução que aponta
+para uma venda existente e cancelamento que chega dias depois. Um gerador sem memória não consegue. Além
+disso, contar arquivos e somar `vNF` (D005) não prova que cada arquivo chegou como saiu.
+**Decisão:** o gerador guarda estado em `gerador_estado.json` e entrega um lote por dia, em pasta própria,
+publicada na inbox só quando completa. O `controle_lote.json` traz, além dos totais, um romaneio com o sha256
+de cada arquivo na saída do ERP. O gabarito das anomalias fica em outra pasta, que o pipeline não lê.
+**Consequência:** a custódia compara o sha256 recebido com o declarado e detecta arquivo truncado antes de
+qualquer parse. O estado torna a geração sequencial: perder o arquivo de estado exige recomeçar a massa (o
+gerador recusa gravar por cima de um lote existente).
+
 ## D015 — Portas do object store configuráveis no host
 
 **Contexto:** na primeira subida na máquina do dono (Windows + Docker Desktop + WSL2), o `make up` falhou ao
@@ -138,3 +150,22 @@ os padrões de antes. A D011 continua valendo como padrão; a variável é a sa�
 **Consequência:** nada muda dentro da rede do compose (`S3_ENDPOINT` segue `http://minio:9000`). Quem já tem
 `.env` precisa acrescentar a variável. O `S3_ENDPOINT` do `.env` (usado só fora do compose) deve acompanhar
 `MINIO_API_PORT` se ela mudar.
+
+## D016 — Objeto endereçado pelo conteúdo, recebimento por arquivo e bronze lida do raw
+
+**Contexto:** o inventário (`custodia.documento`) tem uma linha por objeto. O reenvio idêntico precisa
+aparecer na contagem do lote sem duplicar a custódia, a bronze tem uma linha por arquivo recebido e precisa ser
+reconstruível a partir do raw. Com só o inventário, um arquivo reenviado não teria de onde ser reconstruído.
+**Decisão:** a chave do objeto é derivada do conteúdo: `nfe/AAAA/MM/<chave>/<sha256>.xml` (e `evento/...`,
+`invalido/<sha256>.xml` para o ilegível). `custodia.recebimento` registra cada arquivo entregue em cada lote e
+aponta para o objeto, com o sha256 recebido e o declarado no romaneio. A bronze é carregada a partir do
+recebimento, lendo do bucket pela versão registrada e conferindo o hash, e não da pasta de rede. A conferência
+contra o romaneio fica em `ctrl.lote_divergencia` (FALTANTE, NAO_DECLARADO, HASH_DIVERGENTE). Arquivo faltante
+ou fora do romaneio deixa o lote `INCOMPLETO`; hash divergente não, porque o arquivo chegou e a quarentena
+da silver decide o destino dele (D007). A segunda entrega de um lote já carregado é recusada e vai para
+`rejeitados/`.
+**Consequência:** reenvio idêntico = um objeto, dois recebimentos. Mesma chave com conteúdo diferente = dois
+objetos na mesma pasta da chave. Toda carga da bronze lê o raw, então a reconstrução é o caminho de sempre e
+não um procedimento de exceção; `make teste-bronze` prova isso comparando uma bronze paralela com a real.
+O PUT envia o sha256 (`x-amz-checksum-sha256`) e o object store recusa o objeto se o conteúdo chegar diferente.
+

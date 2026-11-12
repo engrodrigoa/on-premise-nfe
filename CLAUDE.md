@@ -35,7 +35,7 @@ A versão do Airflow aparece em três lugares que precisam andar juntos: `Docker
 - `pipelines/commons/` — `config.py` (única leitura de variáveis de ambiente), `db.py`, `s3.py`
 - `pipelines/custodia/` — bucket, inventário e testes da custódia
 - `dbt/` — projeto dbt (`silver`, `gold`); perfil lê as variáveis `DB_*`
-- `gerador/` — sistema de origem simulado (marco 2)
+- `gerador/` — sistema de origem simulado: `gen_nfe.py` (um lote por dia, com estado) e `referencias.py` (cenário e regras fiscais a validar)
 - `infra/postgres/init/` — bootstrap + DDL idempotente (fonte única das tabelas que não são do dbt)
 - `grafana/` — provisionamento e painel como código
 - `tests/` — sem stack: `pytest`. Com banco: defina `DB_HOST`. Com Airflow instalado: `tests/test_dag_integrity.py`
@@ -53,7 +53,7 @@ A versão do Airflow aparece em três lugares que precisam andar juntos: `Docker
 - **Erro x aviso (D007):** só vai para a quarentena o que não é um documento íntegro do grupo. Inconsistência
   fiscal é aviso, e a nota segue.
 - **Regra fiscal (D008):** nunca no código. Fica em seed do dbt, com vigência, marcada "a validar".
-- **Configuração:** nenhum módulo lê `os.environ` fora de `pipelines/commons/config.py`. Segredo só no `.env`.
+- **Configuração:** em `pipelines/` e nas DAGs, ninguém lê `os.environ` fora de `pipelines/commons/config.py`. O `gerador/` é um sistema externo simulado e não importa nada de `pipelines/`. Segredo só no `.env`.
 - **DDL:** idempotente (`IF NOT EXISTS`, `CREATE OR REPLACE`), aplicado duas vezes no CI.
 - **Dado pessoal:** CPF, nome e endereço de pessoa física não chegam à gold nem ao painel (CPF vira hash).
 - **Commits e PRs:** sem link de sessão do Claude.

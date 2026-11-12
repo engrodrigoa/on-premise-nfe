@@ -6,8 +6,8 @@ fiscal e o financeiro consultam, já com os grupos da reforma tributária (IBS, 
 O projeto é escrito como o trabalho de um **consultor de engenharia de dados** dentro do cliente: primeiro o
 escopo, depois o desenho das quatro linhas, depois a entrega por marcos.
 
-> **Status: marco 1 (fundação).** O ambiente sobe com `make up`: Postgres, object store da custódia,
-> Airflow 3.4 e Grafana, com as tabelas de controle criadas. O pipeline ainda não foi implementado.
+> **Status: marcos 1 e 2 (fundação e origem).** O ambiente sobe com `make up` e o ERP simulado entrega lotes
+> diários na pasta de rede. O pipeline (custódia, bronze, silver, gold e painel) ainda não foi implementado.
 > O que existe e o que falta está em [docs/roadmap.md](docs/roadmap.md).
 
 Dados **100% sintéticos**. O cliente ("Grupo Xis") é fictício e nenhum documento, CNPJ ou CPF real entra neste
@@ -89,6 +89,22 @@ make ps              # todos os serviços devem ficar "healthy" (o primeiro buil
 make smoke           # confere Postgres, bucket da custódia e dbt por dentro do Airflow
 make teste-custodia  # versionamento e bloqueio de objeto no object store real (decisão D003)
 make creds           # endereços e logins desta máquina
+```
+
+Massa de dados (o ERP simulado entrega um lote por dia em `datasource/nfe/inbox/`):
+
+```bash
+make gerar                 # o próximo dia, sem anomalias
+make gerar-sujo DIAS=5     # os próximos 5 dias, com anomalias e gabarito
+make gerar ARGS="--incompleto 40"   # um lote entregue com 40 arquivos a menos
+```
+
+Carga até a bronze (`dag_nfe_saida`, um lote por execução, do mais antigo para o mais novo):
+
+```bash
+make carregar       # liga a DAG e dispara; ela encadeia sozinha até esvaziar a inbox
+make lotes          # saúde da carga por lote (ctrl.v_lote): declarado x recebido x custodiado x bronze
+make teste-bronze   # reconstrói a bronze a partir do raw, numa tabela temporária, e compara
 ```
 
 | Serviço | Endereço |

@@ -22,6 +22,8 @@ OBJETOS_ESPERADOS = [
     "ctrl.integridade_custodia",
     "custodia.documento",
     "bronze.documento_xml",
+    "custodia.recebimento",
+    "ctrl.lote_divergencia",
 ]
 SCHEMAS_ESPERADOS = ["custodia", "bronze", "silver", "gold", "ctrl"]
 
