@@ -37,9 +37,11 @@ def test_estrutura(painel):
 
 
 def test_painel_enxuto(painel):
-    """Critério de desenho: poucos painéis, cada um respondendo uma pergunta. Mais que 8 é sinal de vaidade."""
-    assert len(painel["panels"]) <= 8
-    assert sum(p["type"] == "stat" for p in painel["panels"]) == 5
+    """Critério de desenho (D017, D018): veredito no topo (5), contexto logo abaixo (4), o resto é detalhe."""
+    assert len(painel["panels"]) <= 13
+    stats = sorted((p["gridPos"]["y"], p["title"]) for p in painel["panels"] if p["type"] == "stat")
+    assert [y for y, _ in stats].count(0) == 5        # a linha do veredito
+    assert len(stats) == 9
 
 
 def test_leiaute_sem_sobreposicao(painel):
@@ -50,15 +52,17 @@ def test_leiaute_sem_sobreposicao(painel):
         celulas = {(x, y) for x in range(g["x"], g["x"] + g["w"]) for y in range(g["y"], g["y"] + g["h"])}
         assert not celulas & ocupado, f"sobreposição em {p['title']}"
         ocupado |= celulas
-    assert max(p["gridPos"]["y"] + p["gridPos"]["h"] for p in painel["panels"]) <= 22   # cabe numa tela
+    # veredito, contexto, ação e séries cabem numa tela; só a tabela de detalhe fica abaixo da dobra
+    fim = {p["title"]: p["gridPos"]["y"] + p["gridPos"]["h"] for p in painel["panels"]}
+    assert max(v for k, v in fim.items() if k != "Divergências arquivo a arquivo") <= 22
 
 
 def test_so_le_ctrl_e_custodia(painel):
     """D009: o Grafana não lê bronze nem silver (a role nem tem acesso)."""
     for p in painel["panels"]:
         sql = p["targets"][0]["rawSql"]
-        esquemas = set(re.findall(r"\b([a-z_]+)\.[a-z_]+\b", sql)) - {"l", "d", "r", "u", "a"}
-        assert esquemas <= {"ctrl", "custodia"}, f"{p['title']}: {esquemas}"
+        esquemas = set(re.findall(r"\b(?:FROM|JOIN)\s+([a-z_]+)\.", sql, flags=re.IGNORECASE))
+        assert esquemas and esquemas <= {"ctrl", "custodia"}, f"{p['title']}: {esquemas}"
 
 
 # ------------------------------------------------------------------------------------------- com banco
@@ -128,3 +132,22 @@ def test_todas_as_consultas_rodam_como_grafana(painel, conexao_db):
     cur = conexao_db.cursor()
     for p in painel["panels"]:
         _como_grafana(cur, _sql(painel, p["title"]))
+
+
+def test_volume_fora_do_padrao(painel, conexao_db):
+    """Último lote 60% acima da média do mesmo dia da semana: o painel mostra +60."""
+    cur = conexao_db.cursor()
+    # sextas-feiras de um ano distante, para ficarem por último na ordem dos lotes
+    for dia, qtd in (("9999-10-29", 100), ("9999-11-05", 100), ("9999-11-12", 100), ("9999-11-19", 100),
+                     ("9999-11-25", 10), ("9999-11-26", 160)):
+        _lote(cur, f"lote_{dia}", "CARREGADO", declarado_arquivos=qtd, qtd_arquivos=qtd, qtd_bronze=qtd,
+              carregado_em="now")
+    assert _valor(cur, painel, "Volume do último lote") == 60
+
+
+def test_volume_sem_historico(painel, conexao_db):
+    cur = conexao_db.cursor()
+    _lote(cur, "lote_9999-12-31", "CARREGADO", declarado_arquivos=50, qtd_arquivos=50, qtd_bronze=50,
+          carregado_em="now")
+    assert _valor(cur, painel, "Volume do último lote") is None       # o painel mostra "histórico curto"
+

@@ -182,3 +182,19 @@ ficam de fora.
 `custodia` (D009 continua valendo). Os limites (26 h, 30 min, 600 s) ficam no JSON e na tabela do
 `docs/05_dashboard.md`; mudar um limite é mudar os dois.
 
+> Revista em parte pela D018: volume entra como contexto e como sinal de anomalia.
+
+## D018 — Volume no painel de operação: contexto e anomalia, não contador
+
+**Contexto:** na primeira revisão do painel de saúde, o dono pediu números de volume (execuções, lotes, XML,
+taxa de eficiência) e uma série diária. A D017 tinha deixado volume de fora por não mudar decisão.
+**Decisão:** volume entra de três formas, numa linha menor abaixo do veredito: (1) **lotes e XML no período**,
+como denominador dos indicadores de cima; (2) **% de lotes sem intervenção** no lugar da taxa de sucesso do
+Airflow, que conta como sucesso as execuções em que o sensor não achou lote; (3) **volume do último lote
+comparado ao mesmo dia da semana nas 4 semanas anteriores**, com faixa verde de ±50%. É o pilar "volume" da
+observabilidade de dados: um dia com metade das notas é sinal, mesmo com o romaneio fechado. Também entra a série
+diária de XML e lotes. Execuções e falhas do Airflow ficam de fora: são em maioria execuções vazias, estão no
+banco do Airflow (fora do alcance da `grafana_ro`), e a falha que importa já vira `ERRO` em `ctrl.lote`.
+**Consequência:** o painel passa de 8 para 13 elementos, mas mantém a hierarquia: veredito, contexto, ação,
+séries, detalhe. Sem pelo menos 2 semanas de histórico, o indicador de volume mostra "histórico curto".
+

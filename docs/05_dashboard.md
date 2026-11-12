@@ -79,13 +79,18 @@ notas por dia e contagens que só crescem ficam de fora. Elas não mudam nenhuma
 
 ```
 ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
-│ Horas sem    │ Falhas de    │ Entregas     │ Arquivos     │ Custódia     │
+│ Horas sem    │ Falhas de    │ Entregas     │ Arquivos     │ Custódia     │  veredito
 │ carga        │ processo     │ incompletas  │ perdidos     │ íntegra?     │
-├──────────────┴──────────────┴──────────────┴──────────────┴──────────────┤
-│ O que exige ação: severidade · quem age · onde · o que aconteceu · desde  │
-├────────────────────────────────────────────┬─────────────────────────────┤
-│ Divergências arquivo a arquivo             │ Duração da carga por lote   │
-└────────────────────────────────────────────┴─────────────────────────────┘
+├──────────────┴─┬────────────┴───┬──────────┴──────┬───────┴──────────────┤
+│ Lotes no       │ XML recebidos  │ Lotes sem       │ Volume do último     │  contexto (D018)
+│ período        │                │ intervenção     │ lote × mesmo dia     │
+├────────────────┴────────────────┴─────────────────┴──────────────────────┤
+│ O que exige ação: severidade · quem age · onde · o que aconteceu · desde  │  ação
+├────────────────────────────────────┬─────────────────────────────────────┤
+│ XML e lotes por dia de execução    │ Duração da carga por lote           │  séries
+├────────────────────────────────────┴─────────────────────────────────────┤
+│ Divergências arquivo a arquivo                                            │  detalhe
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
 | Painel | Pergunta | Regra | Verde | Quem age |
@@ -96,8 +101,12 @@ notas por dia e contagens que só crescem ficam de fora. Elas não mudam nenhuma
 | Arquivos perdidos no pipeline | perdemos algo entre a pasta e a bronze? | por lote terminado: pasta × `custodia.recebimento` × bronze | 0, sempre | Engenharia |
 | Custódia íntegra? | o XML legal segue igual? | última verificação de `ctrl.integridade_custodia` (marco 7) | `OK` | Engenharia |
 | O que exige ação | o que fazer agora? | uma linha por problema: erro, lote preso, incompleto, hash divergente, mesma chave com dois XMLs | vazia | a coluna diz |
+| Lotes no período / XML recebidos | qual o tamanho da amostra? | contagem no período | — (contexto) | — |
+| Lotes sem intervenção | quanto da carga roda sozinha? | `CARREGADO` sem hash divergente nem arquivo fora do romaneio ÷ lotes terminados (inclusive `ERRO`) | ≥ 95% (laranja ≥ 80%) | — |
+| Volume do último lote | o volume está no padrão? | declarado no último lote ÷ média do mesmo dia da semana nas 4 semanas anteriores − 1 | entre −50% e +50% | TI do ERP |
+| XML e lotes por dia de execução | algum dia fora da curva? | soma por dia de `recebido_em` | — (série) | — |
 | Divergências arquivo a arquivo | qual arquivo? | `ctrl.lote_divergencia` no período | vazia | TI do ERP |
-| Duração da carga por lote | está degradando? | `seg_custodia` + `seg_bronze` por lote | bem abaixo de 600 s (a agenda) | Engenharia |
+| Duração da carga por lote | está degradando? | `seg_total` por lote, um ponto por lote | bem abaixo de 600 s (a agenda) | Engenharia |
 
 Teste: `tests/test_painel.py` planta um cenário no banco (erro, lote preso, incompleto, arquivo perdido,
 custódia divergente) e confere que cada painel, rodando com a role `grafana_ro`, acusa o que foi plantado.
