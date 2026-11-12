@@ -1,0 +1,3 @@
+# scripts executados dentro de containers Linux precisam de final de linha LF (checkout no Windows)
+*.sh text eol=lf
+Makefile text eol=lf

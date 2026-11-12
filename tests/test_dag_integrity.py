@@ -1,0 +1,47 @@
+"""As DAGs carregam no Airflow real (mesma versão da imagem)? Pulado quando o Airflow não está instalado.
+
+Usa o mesmo DagBag do dag-processor. Pega antes do deploy o que só apareceria na primeira execução:
+erro de import e uso de API obsoleta.
+"""
+import warnings
+from pathlib import Path
+
+import pytest
+
+# a pasta airflow/ do repositório não conta como Airflow instalado, por isso airflow.sdk
+pytest.importorskip("airflow.sdk", reason="Airflow 3 não instalado (roda no job airflow-dags do CI)")
+pytestmark = pytest.mark.airflow
+
+PASTA_DAGS = Path(__file__).resolve().parents[1] / "airflow" / "dags"
+DAGS_ESPERADAS = {"dag_fundacao_smoke"}
+
+
+@pytest.fixture(scope="module")
+def dagbag_e_avisos():
+    from airflow.dag_processing.dagbag import DagBag
+
+    with warnings.catch_warnings(record=True) as avisos:
+        warnings.simplefilter("always")
+        bag = DagBag(str(PASTA_DAGS))
+    return bag, avisos
+
+
+def test_nenhuma_dag_com_erro_de_import(dagbag_e_avisos):
+    bag, _ = dagbag_e_avisos
+    assert not bag.import_errors, bag.import_errors
+    assert set(bag.dag_ids) == DAGS_ESPERADAS
+
+
+def test_nenhuma_api_obsoleta_do_airflow(dagbag_e_avisos):
+    _, avisos = dagbag_e_avisos
+    obsoletas = sorted({str(a.message).splitlines()[0] for a in avisos
+                        if "deprecated" in str(a.message).lower() and str(PASTA_DAGS) in str(a.filename)})
+    assert not obsoletas, obsoletas
+
+
+def test_dag_de_smoke_tem_as_tres_verificacoes_em_ordem(dagbag_e_avisos):
+    bag, _ = dagbag_e_avisos
+    dag = bag.dags["dag_fundacao_smoke"]   # get_dag() consulta o banco de metadados
+    assert {t.task_id for t in dag.tasks} == {"postgres_schemas", "bucket_custodia", "dbt_debug"}
+    assert dag.get_task("bucket_custodia").upstream_task_ids == {"postgres_schemas"}
+    assert dag.get_task("dbt_debug").upstream_task_ids == {"bucket_custodia"}

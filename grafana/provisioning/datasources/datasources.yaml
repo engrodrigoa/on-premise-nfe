@@ -1,0 +1,19 @@
+# Datasource provisionado com UID fixo, para o painel como código referenciar (marco 6).
+# Usa a role somente leitura grafana_ro: só gold, ctrl e custodia (decisão D009).
+apiVersion: 1
+
+datasources:
+  - name: NF-e (Postgres)
+    uid: nfe
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: postgres:5432
+    user: grafana_ro
+    isDefault: true
+    jsonData:
+      database: ${DB_DB}
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: ${GRAFANA_DB_PASSWORD}

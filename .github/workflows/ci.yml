@@ -1,0 +1,80 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # lint + testes que não precisam de stack (custódia contra S3 emulado, compose, configuração)
+  lint-e-unitarios:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env && docker compose config -q
+      - run: docker compose --profile tools config -q
+
+  # DDL de controle em um Postgres real, com o mesmo script que o container executa
+  banco:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env: {POSTGRES_USER: nfe, POSTGRES_PASSWORD: nfe, POSTGRES_DB: nfe}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nfe" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_USER: nfe
+      DB_PASSWORD: nfe
+      DB_DB: nfe
+      PGPASSWORD: nfe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - run: pip install -r requirements-dev.txt
+      - name: bootstrap duas vezes (precisa ser idempotente)
+        run: |
+          for i in 1 2; do
+            PGHOST=localhost POSTGRES_USER=nfe POSTGRES_DB=nfe GRAFANA_DB_PASSWORD=ro \
+            INIT_SQL_DIR=infra/postgres/init/sql bash infra/postgres/init/00_bootstrap.sh
+          done
+      - run: pytest tests/test_ddl.py -v
+      - name: dbt conecta (mesmas versões da imagem)
+        run: |
+          python -m venv .dbt && .dbt/bin/pip install -q -r requirements-dbt.txt
+          .dbt/bin/dbt debug --project-dir dbt --profiles-dir dbt
+
+  # As DAGs carregam no Airflow real, com as mesmas versões da imagem (constraints oficiais)?
+  airflow-dags:
+    runs-on: ubuntu-latest
+    env:
+      AIRFLOW_VERSION: "3.4.0"            # manter igual à tag do FROM no Dockerfile
+      AIRFLOW_HOME: ${{ github.workspace }}/.airflow
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - name: Airflow + dependências das DAGs (constraints oficiais, como no Dockerfile)
+        run: |
+          pip install "apache-airflow==${AIRFLOW_VERSION}" -r requirements.txt pytest pyyaml "moto[s3]>=5,<6" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt"
+      - run: pytest tests/test_dag_integrity.py -v

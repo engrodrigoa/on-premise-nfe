@@ -1,0 +1,8 @@
+# Desenvolvimento local e CI (os testes unitários não precisam do Airflow)
+pytest>=8
+ruff>=0.17          # regras AIR3 (APIs removidas no Airflow 3)
+boto3
+moto[s3]>=5,<6      # emulador de S3 para os testes da custódia
+psycopg2-binary
+lxml
+pyyaml

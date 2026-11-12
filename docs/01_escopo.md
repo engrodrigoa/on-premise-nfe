@@ -89,7 +89,7 @@ Três resultados mensuráveis:
 |---|---|---|
 | Regra fiscal modelada errada (CFOP, cClassTrib, alíquota de importado) | cenário pouco crível para quem é da área | regras em seeds marcadas "a validar"; revisão por tributarista antes de apresentar |
 | Bloqueio de objeto (object lock) não funcionar no object store escolhido em nó único | custódia sem imutabilidade técnica | teste dirigido no marco 1; alternativa: versionamento + política de acesso só de escrita + verificação de hash |
-| Dois stacks Docker na mesma máquina (este e o datalabs) | falta de memória, conflito de porta | projeto e portas próprios; recomendação de subir um por vez em máquina com pouca RAM |
+| Dois stacks Docker na mesma máquina (este e o datalabs) | falta de memória, conflito de porta | os dois usam as portas padrão e não rodam juntos (D011): parar um antes de subir o outro |
 | Escopo crescer para as notas recebidas antes de fechar o MVP | projeto não termina | recebidas só depois do marco 7 |
 | Dado pessoal (CPF e endereço de consumidor) em camada analítica | exposição desnecessária | bruto guardado por obrigação legal; na gold o CPF é mascarado |
 
@@ -115,16 +115,16 @@ Três resultados mensuráveis:
 6. Um arquivo alterado no object store é detectado pela verificação de integridade.
 7. A bronze apagada é reconstruída a partir do raw e a gold volta aos mesmos totais.
 
-## 10. Perguntas em aberto
+## 10. Decisões de escopo
 
-Decisões que são do dono do projeto e travam o marco 2:
+Perguntas levantadas no planejamento e respondidas pelo dono do projeto em 11/11/2026:
 
-1. **Estrutura societária.** Proposta: 2 empresas (2 raízes de CNPJ) e 5 estabelecimentos. Isso permite
-   separar transferência (mesma empresa) de venda entre empresas do grupo. Confirma, ou prefere 1 empresa com 5
-   filiais?
-2. **Linhas de produto.** Três famílias de importados com tributação diferente bastam? Quais (a sugestão evita
-   medicamento, por causa de regimes específicos)?
-3. **Período da massa.** Só 2026 (ano-teste: CBS 0,9% e IBS 0,1%) ou também 2027, com a virada de regra? A
-   segunda opção mostra a tabela de vigência funcionando, mas exige fixar alíquotas de 2027 com um fiscal.
-4. **Volume.** Proposta: 20 a 30 mil notas no ano, em lotes diários.
-5. **Dashboard.** Grafana (já está no stack, painel como código) ou outra ferramenta para o usuário fiscal?
+| # | Pergunta | Decisão |
+|---|---|---|
+| 1 | Estrutura societária | 2 empresas (Xis Importadora e Xis Comércio), 5 estabelecimentos. Separa transferência (mesma empresa) de venda entre empresas do grupo |
+| 2 | Linhas de produto | três famílias de importados: utensílios de cozinha, ferramentas elétricas e acessórios eletrônicos. Sem medicamento e cosmético, que têm regimes próprios |
+| 3 | Período da massa | só 2026, com as alíquotas de teste (CBS 0,9% e IBS 0,1%). 2027 fica para depois do MVP |
+| 4 | Volume | cerca de 25 mil notas no ano, em lotes diários de cerca de 100 |
+| 5 | Dashboard | Grafana |
+| 6 | Onde roda | máquina Windows com WSL2 e Docker Desktop, portas padrão, sem rodar junto com o datalabs (D011) |
+| 7 | Versão do Airflow | 3.4.0 (D012) |

@@ -3,19 +3,24 @@
 .env.*
 !.env.example
 
-# massa gerada e pasta de rede simulada
+# pasta de rede simulada e massa gerada
 datasource/
-data/
+
+# Airflow
+airflow/logs/
 
 # Python
-.venv/
+.venv*/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
 
 # dbt
-target/
-dbt_packages/
-logs/
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
 
 .DS_Store
 Thumbs.db

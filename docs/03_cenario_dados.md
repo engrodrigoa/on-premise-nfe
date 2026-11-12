@@ -1,12 +1,12 @@
 # Cenário de dados: o Grupo Xis
 
 O cliente é fictício. O gerador é o "sistema de origem": faz o papel do ERP que emite a nota e grava o XML na
-pasta de rede. Tudo o que está aqui é **proposta para o marco 2** e depende das perguntas em aberto do
-[escopo](01_escopo.md#10-perguntas-em-aberto).
+pasta de rede. Este é o desenho do marco 2, com as [decisões de escopo](01_escopo.md#10-decisões-de-escopo)
+já tomadas.
 
 ## 1. O grupo
 
-Proposta: duas empresas, cinco estabelecimentos emitentes.
+Duas empresas, cinco estabelecimentos emitentes.
 
 | # | Empresa | Estabelecimento | UF | Papel |
 |---|---|---|---|---|

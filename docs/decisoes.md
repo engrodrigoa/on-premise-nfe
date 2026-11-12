@@ -9,6 +9,7 @@ databricks-nfe-lakehouse. Este projeto muda a perspectiva (empresa emitente, e n
 conferência).
 **Decisão:** repositório próprio, com `docker compose` próprio, usando as mesmas imagens e versões fixadas do
 datalabs. Nome de projeto e portas diferentes, para os dois poderem coexistir na mesma máquina.
+*(Portas e versão do Airflow revistas na D011 e na D012.)*
 **Consequência:** um clone novo funciona sozinho. Código do datalabs é copiado e adaptado, não importado; os
 dois projetos evoluem separados. Custo: dois stacks com Airflow consomem memória, então em máquina pequena sobe
 um por vez.
@@ -92,3 +93,48 @@ Pergunta em aberto no escopo: se o usuário fiscal pede outra ferramenta.
 (IBGE, NCM, CFOP, CST) são reais.
 **Consequência:** assinatura digital e protocolo têm estrutura real e conteúdo aleatório; validação de
 assinatura e consulta de situação na SEFAZ ficam fora do escopo.
+
+## D011 — Portas padrão; o stack não roda junto com o datalabs
+
+**Contexto:** a D001 previa portas diferentes para os dois stacks coexistirem. O dono do projeto decidiu isolar
+este projeto e nunca rodar os dois ao mesmo tempo (a máquina tem 8 GB para o WSL).
+**Decisão:** portas padrão: Postgres 5432, Airflow 8080, Grafana 3000, object store 9000 e 9001. Os containers
+não têm nome fixo; o compose gera os nomes com o prefixo do projeto (`nfe_onprem`).
+**Consequência:** endereços fáceis de lembrar. Com o datalabs de pé, `make up` falha por porta ocupada, e a
+correção é `make down` no datalabs. Nomes de container nunca colidem, mesmo com o datalabs parado.
+
+## D012 — Airflow 3.4.0, com o dbt chamado por linha de comando (sem Cosmos)
+
+**Contexto:** o datalabs está no Airflow 3.3.2 com astronomer-cosmos 1.15.1. O dono do projeto quer avaliar o
+3.4.0, publicado em 06/11/2026. A imagem do 3.4 mudou de base (Debian 13), e a compatibilidade do Cosmos com
+o 3.4 não foi verificada neste projeto.
+**Decisão:** imagem `apache/airflow:3.4.0-python3.12`, dependências resolvidas com as constraints oficiais do
+3.4.0. O dbt roda em venv isolado e é chamado por `BashOperator` (`dbt build --select ...`), uma task por
+camada.
+**Consequência:** uma dependência a menos para acompanhar em uma versão recém-lançada. Perde-se a visão de
+um nó por modelo na UI do Airflow; o detalhe por modelo fica no log da task e nos artefatos do dbt. Se o
+Cosmos fizer falta, entra depois sem mudar os modelos. O job `airflow-dags` do CI carrega as DAGs no
+Airflow 3.4.0 real a cada PR.
+
+## D013 — Bronze em uma tabela só, e arquivo malformado entra com conteúdo nulo
+
+**Contexto:** o desenho inicial previa duas tabelas na bronze (nota e evento). Mas o tipo de um arquivo
+corrompido não é conhecido, e a conferência "bronze = válidos + quarentena" exige que todo arquivo recebido
+tenha uma linha na bronze.
+**Decisão:** uma tabela, `bronze.documento_xml`, com `tipo_documento` em `nfe`, `evento` ou `invalido`. O
+arquivo que não é XML bem formado entra com `conteudo` nulo, a mensagem do parser e o início do texto. Na
+custódia ele é guardado do mesmo jeito, sob o prefixo `invalido/`.
+**Consequência:** nenhum arquivo some entre a pasta e a bronze, e a contagem fecha sem tabela de rejeitados à
+parte. Quem decide o destino do arquivo malformado é a silver (quarentena, motivo `xml_corrompido`).
+
+## D015 — Portas do object store configuráveis no host
+
+**Contexto:** na primeira subida na máquina do dono (Windows + Docker Desktop + WSL2), o `make up` falhou ao
+publicar a 9001: o Windows reservava essa porta (`netsh interface ipv4 show excludedportrange protocol=tcp`
+listava 9001-9001) e o redirecionador de portas do Docker Desktop devolveu erro 500. O erro vem do
+sistema operacional, e a D011 (portas padrão) assumia que elas estariam livres.
+**Decisão:** o lado do host das portas 9000 e 9001 vem de `MINIO_API_PORT` e `MINIO_CONSOLE_PORT` no `.env`, com
+os padrões de antes. A D011 continua valendo como padrão; a variável é a saída quando o Windows reserva a porta.
+**Consequência:** nada muda dentro da rede do compose (`S3_ENDPOINT` segue `http://minio:9000`). Quem já tem
+`.env` precisa acrescentar a variável. O `S3_ENDPOINT` do `.env` (usado só fora do compose) deve acompanhar
+`MINIO_API_PORT` se ela mudar.

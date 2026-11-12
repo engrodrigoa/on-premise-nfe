@@ -1,0 +1,13 @@
+# Sem segredo aqui: tudo vem das variáveis DB_* (as mesmas de pipelines/commons/config.py).
+nfe_onprem:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DB_HOST', 'localhost') }}"
+      port: "{{ env_var('DB_PORT', '5432') | int }}"
+      user: "{{ env_var('DB_USER') }}"
+      password: "{{ env_var('DB_PASSWORD') }}"
+      dbname: "{{ env_var('DB_DB') }}"
+      schema: silver
+      threads: 4

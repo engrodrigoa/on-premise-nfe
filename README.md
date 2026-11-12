@@ -6,8 +6,9 @@ fiscal e o financeiro consultam, já com os grupos da reforma tributária (IBS, 
 O projeto é escrito como o trabalho de um **consultor de engenharia de dados** dentro do cliente: primeiro o
 escopo, depois o desenho das quatro linhas, depois a entrega por marcos.
 
-> **Status: planejamento (marco 0).** Este commit contém só o planejamento. Nenhum pipeline foi implementado
-> ainda. O que existe e o que falta está em [docs/roadmap.md](docs/roadmap.md).
+> **Status: marco 1 (fundação).** O ambiente sobe com `make up`: Postgres, object store da custódia,
+> Airflow 3.4 e Grafana, com as tabelas de controle criadas. O pipeline ainda não foi implementado.
+> O que existe e o que falta está em [docs/roadmap.md](docs/roadmap.md).
 
 Dados **100% sintéticos**. O cliente ("Grupo Xis") é fictício e nenhum documento, CNPJ ou CPF real entra neste
 repositório.
@@ -65,17 +66,39 @@ Mapa completo, etapa por etapa: **[docs/02_fluxo.md](docs/02_fluxo.md)**.
 
 ## Stack
 
-A mesma do [datalabs](https://github.com/engrodrigoa/datalabs), com as mesmas versões fixadas, num
-`docker compose` próprio (decisão D001):
+Base no [datalabs](https://github.com/engrodrigoa/datalabs), num `docker compose` próprio, com versões fixas
+(decisões D001, D011 e D012):
 
 | Camada | Ferramenta |
 |---|---|
-| Orquestração | Airflow 3.3.2 (api-server, scheduler, dag-processor, triggerer) + astronomer-cosmos 1.15.1 |
-| Custódia (raw) | Silo (fork comunitário do MinIO, API S3), bucket com versionamento e retenção |
+| Orquestração | Airflow 3.4.0 (api-server, scheduler, dag-processor, triggerer), LocalExecutor |
+| Custódia (raw) | Silo (fork comunitário do MinIO, API S3), bucket com versionamento e bloqueio de objeto |
 | Banco | Postgres 15 |
-| Transformação | dbt-core 1.11 + dbt-postgres (parse com `XMLTABLE`) |
-| Ingestão | Python (boto3 + psycopg): pasta → object store → bronze |
+| Transformação | dbt-core 1.11 + dbt-postgres, em venv isolado (parse com `XMLTABLE`) |
+| Ingestão | Python (boto3 + psycopg2): pasta → object store → bronze |
 | Dashboard | Grafana 12, painel como código |
+
+## Como rodar
+
+Pré-requisitos: Docker (no Windows, Docker Desktop com WSL2 e o repositório clonado **dentro** do WSL) e `make`.
+Este stack usa as portas padrão; pare o datalabs antes (`make down` lá).
+
+```bash
+make up              # cria o .env com senhas aleatórias, faz o build e sobe tudo
+make ps              # todos os serviços devem ficar "healthy" (o primeiro build leva alguns minutos)
+make smoke           # confere Postgres, bucket da custódia e dbt por dentro do Airflow
+make teste-custodia  # versionamento e bloqueio de objeto no object store real (decisão D003)
+make creds           # endereços e logins desta máquina
+```
+
+| Serviço | Endereço |
+|---|---|
+| Airflow | http://localhost:8080 |
+| Grafana | http://localhost:3000 |
+| Console do object store | http://localhost:9001 (porta configurável: `MINIO_CONSOLE_PORT` no `.env`) |
+| Postgres | `localhost:5432` |
+
+`make down` para tudo e mantém os dados. `make clean` apaga os volumes, inclusive a custódia.
 
 ## De onde vem o código
 
@@ -92,7 +115,7 @@ consultoria. Detalhes em [docs/03_cenario_dados.md](docs/03_cenario_dados.md).
 
 | Documento | Conteúdo |
 |---|---|
-| [01_escopo.md](docs/01_escopo.md) | escopo de consultoria: objetivo, dentro e fora, premissas, riscos, critérios de aceite, perguntas em aberto |
+| [01_escopo.md](docs/01_escopo.md) | escopo de consultoria: objetivo, dentro e fora, premissas, riscos, critérios de aceite, decisões de escopo |
 | [02_fluxo.md](docs/02_fluxo.md) | mapa das quatro linhas por etapa |
 | [03_cenario_dados.md](docs/03_cenario_dados.md) | o cliente fictício, as operações, as anomalias e o que muda no gerador |
 | [04_arquitetura.md](docs/04_arquitetura.md) | camadas, objetos, custódia e tabelas de controle |

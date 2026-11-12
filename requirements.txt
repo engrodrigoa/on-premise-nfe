@@ -1,0 +1,8 @@
+# Dependências da imagem do Airflow (resolvidas com as constraints oficiais no Dockerfile).
+# Os providers já vêm na imagem oficial; ficam listados para o build falhar cedo se um deles sumir.
+apache-airflow-providers-fab
+apache-airflow-providers-standard
+apache-airflow-providers-postgres
+boto3
+psycopg2-binary
+lxml
