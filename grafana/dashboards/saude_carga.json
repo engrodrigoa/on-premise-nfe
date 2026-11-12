@@ -1,0 +1,754 @@
+{
+  "uid": "nfe-saude-carga",
+  "title": "NF-e · Saúde da carga",
+  "description": "O pipeline está seguro? Verde nos 5 indicadores e a tabela 'O que exige ação' vazia = sim.",
+  "tags": [
+    "nfe",
+    "observabilidade"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 0,
+  "refresh": "1m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "schemaVersion": 41,
+  "version": 1,
+  "links": [
+    {
+      "title": "Airflow",
+      "type": "link",
+      "url": "http://localhost:8080/dags/dag_nfe_saida",
+      "targetBlank": true,
+      "icon": "external link",
+      "tooltip": "DAG de carga"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Horas sem carga",
+      "description": "Está rodando? Horas desde o fim da última carga de lote. A origem entrega um lote por dia útil: acima de 26 h ou o ERP não entregou ou a DAG parou; acima de 74 h nem o fim de semana explica.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT round((extract(epoch FROM now() - max(carregado_em)) / 3600)::numeric, 1) AS horas\n  FROM ctrl.lote\n WHERE status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "noValue": "nunca carregou",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 26
+              },
+              {
+                "color": "red",
+                "value": 74
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Falhas de processo",
+      "description": "Quebrou algo? Lotes em ERRO mais lotes parados no meio da carga (RECEBIDO ou CUSTODIADO) há mais de 30 min. Não depende do período: falha aberta continua aberta. Quem age: Engenharia (runbook).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 5,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS falhas\n  FROM ctrl.lote\n WHERE status = 'ERRO'\n    OR (status IN ('RECEBIDO', 'CUSTODIADO') AND recebido_em < now() - interval '30 minutes')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Entregas incompletas",
+      "description": "A origem entregou tudo? Lotes INCOMPLETO no período: arquivo declarado no romaneio e não entregue, arquivo fora do romaneio ou lote sem arquivo de controle. Quem age: TI do ERP.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 10,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS incompletas\n  FROM ctrl.lote\n WHERE status = 'INCOMPLETO' AND $__timeFilter(recebido_em)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Arquivos perdidos no pipeline",
+      "description": "Perdemos algo entre a pasta e a bronze? Para cada lote terminado: arquivos contados na pasta x recebimentos registrados na custódia x linhas na bronze. Tem de ser 0 sempre; qualquer outro valor é incidente.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 15,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT coalesce(sum(abs(coalesce(l.qtd_arquivos, 0) - coalesce(r.qtd, 0))\n                  + abs(coalesce(r.qtd, 0) - coalesce(l.qtd_bronze, 0))), 0) AS perdidos\n  FROM ctrl.lote l\n  LEFT JOIN (SELECT lote_id, count(*) AS qtd FROM custodia.recebimento GROUP BY lote_id) r USING (lote_id)\n WHERE l.status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Custódia íntegra?",
+      "description": "O XML legal continua igual ao que foi recebido? Resultado da verificação periódica de integridade (recalcula o sha256 de cada objeto). A DAG de verificação entra no marco 7: até lá, NUNCA VERIFICADA.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH u AS (\n  SELECT max(verificado_em) AS ultima,\n         count(*) FILTER (WHERE resultado <> 'OK' AND verificado_em > now() - interval '8 days') AS problemas\n    FROM ctrl.integridade_custodia\n)\nSELECT CASE WHEN problemas > 0                        THEN 'DIVERGENTE (' || problemas || ')'\n            WHEN ultima IS NULL                       THEN 'NUNCA VERIFICADA'\n            WHEN ultima < now() - interval '8 days'   THEN 'ATRASADA'\n            ELSE 'OK' END AS estado\n  FROM u"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "OK": {
+                  "color": "green",
+                  "index": 0
+                },
+                "NUNCA VERIFICADA": {
+                  "color": "orange",
+                  "index": 1
+                },
+                "ATRASADA": {
+                  "color": "orange",
+                  "index": 2
+                }
+              }
+            },
+            {
+              "type": "regex",
+              "options": {
+                "pattern": "^DIVERGENTE.*",
+                "result": {
+                  "color": "red",
+                  "index": 3
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^estado$/",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "O que exige ação",
+      "description": "Uma linha por problema, com quem age. Vazia = nada a fazer. Falhas de processo aparecem sempre; os demais itens, dentro do período selecionado.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT severidade, quem_age, onde, o_que_aconteceu, desde FROM (\n  SELECT 'CRÍTICO' AS severidade, 'Engenharia' AS quem_age, nome_lote AS onde,\n         'falhou: ' || coalesce(mensagem, 'sem mensagem') AS o_que_aconteceu, recebido_em AS desde\n    FROM ctrl.lote WHERE status = 'ERRO'\n  UNION ALL\n  SELECT 'CRÍTICO', 'Engenharia', nome_lote,\n         'parado em ' || status || ' há ' || (extract(epoch FROM now() - recebido_em) / 60)::int || ' min',\n         recebido_em\n    FROM ctrl.lote WHERE status IN ('RECEBIDO', 'CUSTODIADO') AND recebido_em < now() - interval '30 minutes'\n  UNION ALL\n  SELECT 'ATENÇÃO', 'TI do ERP', nome_lote, mensagem, recebido_em\n    FROM ctrl.lote\n   WHERE $__timeFilter(recebido_em) AND (status = 'INCOMPLETO' OR coalesce(qtd_hash_divergente, 0) > 0)\n  UNION ALL\n  SELECT 'ATENÇÃO', 'Fiscal', 'chave ' || chave_acesso,\n         qtd_conteudos || ' XMLs diferentes custodiados para a mesma chave: qual é o válido?', primeiro_em\n    FROM custodia.v_chave_com_conteudos_diferentes WHERE $__timeFilter(ultimo_em)\n) a\nORDER BY severidade = 'CRÍTICO' DESC, desde DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "nada a fazer",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "severidade"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "CRÍTICO": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "ATENÇÃO": {
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "quem_age"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "quem age"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "onde"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 240
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "o_que_aconteceu"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "o que aconteceu"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "desde"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              },
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Divergências arquivo a arquivo",
+      "description": "Conferência de cada lote contra o romaneio da origem (controle_lote.json). FALTANTE: declarado e não entregue. NAO_DECLARADO: entregue fora do romaneio. HASH_DIVERGENTE: chegou diferente do que saiu do ERP (o arquivo fica custodiado como evidência).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT l.nome_lote AS lote, d.arquivo, d.tipo,\n       left(d.sha256_declarado, 12) AS sha_declarado, left(d.sha256_recebido, 12) AS sha_recebido,\n       d.registrado_em AS registrado\n  FROM ctrl.lote_divergencia d\n  JOIN ctrl.lote l USING (lote_id)\n WHERE $__timeFilter(d.registrado_em)\n ORDER BY d.registrado_em DESC, d.arquivo\n LIMIT 200"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "nenhuma divergência",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tipo"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "FALTANTE": {
+                        "color": "orange",
+                        "index": 0
+                      },
+                      "NAO_DECLARADO": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "HASH_DIVERGENTE": {
+                        "color": "red",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "registrado"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Duração da carga por lote",
+      "description": "Segundos da reserva do lote até a bronze, por etapa. Serve para ver degradação antes da falha: a agenda roda a cada 10 min, então um lote que passa de 600 s começa a atrasar a fila.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT recebido_em AS time, seg_custodia AS \"custódia\", seg_bronze AS \"bronze\"\n  FROM ctrl.v_lote\n WHERE $__timeFilter(recebido_em) AND status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO')\n ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never",
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    }
+  ]
+}

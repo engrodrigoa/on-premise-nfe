@@ -1,4 +1,9 @@
-# Dashboard: a página única (linha 4)
+# Dashboards
+
+Dois públicos, duas páginas (D017): a de **negócio** (linha 4, marco 6), descrita primeiro, e a de **operação**
+(linha 2), no fim deste documento.
+
+## Página de negócio (linha 4)
 
 A comprovação final do projeto. Uma página, lida pelo fiscal e pelo financeiro, que fecha o assunto: estes são
 os números das notas emitidas, e eles foram conferidos com os XMLs.
@@ -62,3 +67,37 @@ divergiram. Os valores continuam visíveis, marcados como não conferidos.
 Antes de considerar o marco 6 pronto, os quatro indicadores do topo são recalculados direto na silver, com SQL
 escrito à parte, e comparados com o que a página mostra. Toda consulta do painel entra na suíte de testes, como
 no datalabs.
+
+## Página de operação: saúde da carga (linha 2)
+
+`grafana/dashboards/saude_carga.json`, uid `nfe-saude-carga`. Quem lê é quem sustenta o pipeline (engenharia,
+consultoria). A pergunta é uma só: **o pipeline está seguro?** Sim = os 5 indicadores verdes e a tabela
+"O que exige ação" vazia.
+
+Critério de desenho: cada painel responde uma pergunta de sim ou não e tem limite definido. Volume processado,
+notas por dia e contagens que só crescem ficam de fora. Elas não mudam nenhuma decisão.
+
+```
+┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+│ Horas sem    │ Falhas de    │ Entregas     │ Arquivos     │ Custódia     │
+│ carga        │ processo     │ incompletas  │ perdidos     │ íntegra?     │
+├──────────────┴──────────────┴──────────────┴──────────────┴──────────────┤
+│ O que exige ação: severidade · quem age · onde · o que aconteceu · desde  │
+├────────────────────────────────────────────┬─────────────────────────────┤
+│ Divergências arquivo a arquivo             │ Duração da carga por lote   │
+└────────────────────────────────────────────┴─────────────────────────────┘
+```
+
+| Painel | Pergunta | Regra | Verde | Quem age |
+|---|---|---|---|---|
+| Horas sem carga | está rodando? | agora − último `carregado_em` | < 26 h (laranja até 74 h) | Engenharia ou TI do ERP |
+| Falhas de processo | quebrou algo? | lotes `ERRO` + lotes em `RECEBIDO`/`CUSTODIADO` há mais de 30 min; ignora o período | 0 | Engenharia |
+| Entregas incompletas | a origem entregou tudo? | lotes `INCOMPLETO` no período | 0 | TI do ERP |
+| Arquivos perdidos no pipeline | perdemos algo entre a pasta e a bronze? | por lote terminado: pasta × `custodia.recebimento` × bronze | 0, sempre | Engenharia |
+| Custódia íntegra? | o XML legal segue igual? | última verificação de `ctrl.integridade_custodia` (marco 7) | `OK` | Engenharia |
+| O que exige ação | o que fazer agora? | uma linha por problema: erro, lote preso, incompleto, hash divergente, mesma chave com dois XMLs | vazia | a coluna diz |
+| Divergências arquivo a arquivo | qual arquivo? | `ctrl.lote_divergencia` no período | vazia | TI do ERP |
+| Duração da carga por lote | está degradando? | `seg_custodia` + `seg_bronze` por lote | bem abaixo de 600 s (a agenda) | Engenharia |
+
+Teste: `tests/test_painel.py` planta um cenário no banco (erro, lote preso, incompleto, arquivo perdido,
+custódia divergente) e confere que cada painel, rodando com a role `grafana_ro`, acusa o que foi plantado.

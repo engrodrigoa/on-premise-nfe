@@ -169,3 +169,16 @@ objetos na mesma pasta da chave. Toda carga da bronze lê o raw, então a recons
 não um procedimento de exceção; `make teste-bronze` prova isso comparando uma bronze paralela com a real.
 O PUT envia o sha256 (`x-amz-checksum-sha256`) e o object store recusa o objeto se o conteúdo chegar diferente.
 
+## D017 — Duas páginas no Grafana: negócio e operação
+
+**Contexto:** o desenho original (`docs/05_dashboard.md`) previa uma página única para o fiscal e o
+financeiro, com a saúde da carga resumida num selo. Na validação do marco 3 ficou claro que quem sustenta o
+pipeline precisa ver a carga antes de existir gold, e que o selo não diz o que fazer quando algo falha.
+**Decisão:** uma segunda página, "NF-e · Saúde da carga", para a operação, construída já sobre `ctrl` e
+`custodia`. A página de negócio do marco 6 continua única para o seu público, e o selo dela passa a apontar
+para esta. Entra no painel só o que responde uma pergunta de sim ou não com limite definido; métricas de volume
+ficam de fora.
+**Consequência:** a linha 2 (observabilidade) ganha tela própria e testada. A página de operação lê só `ctrl` e
+`custodia` (D009 continua valendo). Os limites (26 h, 30 min, 600 s) ficam no JSON e na tabela do
+`docs/05_dashboard.md`; mudar um limite é mudar os dois.
+

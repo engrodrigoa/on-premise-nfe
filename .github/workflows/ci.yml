@@ -56,7 +56,7 @@ jobs:
             PGHOST=localhost POSTGRES_USER=nfe POSTGRES_DB=nfe GRAFANA_DB_PASSWORD=ro \
             INIT_SQL_DIR=infra/postgres/init/sql bash infra/postgres/init/00_bootstrap.sh
           done
-      - run: pytest tests/test_ddl.py tests/test_carga.py -v
+      - run: pytest tests/test_ddl.py tests/test_carga.py tests/test_painel.py -v
       - name: dbt conecta (mesmas versões da imagem)
         run: |
           python -m venv .dbt && .dbt/bin/pip install -q -r requirements-dbt.txt
