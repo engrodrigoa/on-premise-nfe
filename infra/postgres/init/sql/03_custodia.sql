@@ -24,6 +24,25 @@ CREATE INDEX IF NOT EXISTS ix_documento_lote  ON custodia.documento (lote_id);
 
 COMMENT ON TABLE custodia.documento IS 'Inventário da custódia: 1 linha por objeto no bucket, com sha256 e origem';
 
+-- ----------------------------------------------------------------------------
+-- Recebimento: 1 linha por ARQUIVO entregue em um lote, apontando para o objeto custodiado.
+-- Reenvio idêntico = outro recebimento, mesmo documento (um objeto só no bucket). Só INSERT.
+-- É daqui que a bronze é carregada e reconstruída (D016).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS custodia.recebimento (
+    recebimento_id    bigserial   PRIMARY KEY,
+    lote_id           bigint      NOT NULL REFERENCES ctrl.lote (lote_id),
+    arquivo           text        NOT NULL,
+    documento_id      bigint      NOT NULL REFERENCES custodia.documento (documento_id),
+    sha256            char(64)    NOT NULL,   -- o que chegou
+    sha256_declarado  char(64),               -- o que o romaneio diz que saiu do ERP (NULL = não declarado)
+    objeto_novo       boolean     NOT NULL,   -- false: o conteúdo já estava custodiado
+    recebido_em       timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (lote_id, arquivo)
+);
+CREATE INDEX IF NOT EXISTS ix_recebimento_documento ON custodia.recebimento (documento_id);
+COMMENT ON TABLE custodia.recebimento IS 'Arquivo recebido em um lote -> objeto custodiado. Só INSERT';
+
 -- Mesma chave de acesso com conteúdos diferentes: alerta de custódia (docs/03_cenario_dados.md)
 CREATE OR REPLACE VIEW custodia.v_chave_com_conteudos_diferentes AS
 SELECT tipo_documento, chave_acesso, count(DISTINCT sha256) AS qtd_conteudos,

@@ -43,6 +43,11 @@ class Config:
     def dir_processados(self) -> str:
         return f"{self.dir_origem}/processados"
 
+    @property
+    def dir_rejeitados(self) -> str:
+        """Segunda entrega de um lote já carregado: fica separada, para análise."""
+        return f"{self.dir_origem}/rejeitados"
+
 
 def carregar() -> Config:
     lock_mode = _env("CUSTODIA_LOCK_MODE", "GOVERNANCE").upper()

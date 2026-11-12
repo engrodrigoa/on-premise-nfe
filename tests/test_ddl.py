@@ -5,7 +5,8 @@ import pytest
 pytestmark = pytest.mark.db
 
 TABELAS = ["ctrl.lote", "ctrl.dq", "ctrl.reconciliacao", "ctrl.integridade_custodia",
-           "custodia.documento", "bronze.documento_xml"]
+           "custodia.documento", "bronze.documento_xml",
+           "custodia.recebimento", "ctrl.lote_divergencia"]
 
 
 def _lote(cur, nome="lote_teste"):

@@ -33,6 +33,24 @@ CREATE TABLE IF NOT EXISTS ctrl.lote (
 );
 CREATE INDEX IF NOT EXISTS ix_lote_status ON ctrl.lote (status);
 
+-- Marco 3: conferência arquivo a arquivo contra o romaneio (D014, D016)
+ALTER TABLE ctrl.lote ADD COLUMN IF NOT EXISTS qtd_faltantes       int;  -- no romaneio, não chegou
+ALTER TABLE ctrl.lote ADD COLUMN IF NOT EXISTS qtd_nao_declarados  int;  -- chegou, não está no romaneio
+ALTER TABLE ctrl.lote ADD COLUMN IF NOT EXISTS qtd_hash_divergente int;  -- chegou diferente do que saiu do ERP
+
+-- O detalhe: qual arquivo, e o que divergiu. 1 linha por divergência, só INSERT.
+CREATE TABLE IF NOT EXISTS ctrl.lote_divergencia (
+    divergencia_id    bigserial   PRIMARY KEY,
+    lote_id           bigint      NOT NULL REFERENCES ctrl.lote (lote_id),
+    arquivo           text        NOT NULL,
+    tipo              text        NOT NULL CHECK (tipo IN ('FALTANTE', 'NAO_DECLARADO', 'HASH_DIVERGENTE')),
+    sha256_declarado  char(64),
+    sha256_recebido   char(64),
+    registrado_em     timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (lote_id, arquivo, tipo)
+);
+COMMENT ON TABLE ctrl.lote_divergencia IS 'Linha 2: arquivo do lote que não confere com o romaneio da origem';
+
 COMMENT ON TABLE  ctrl.lote IS 'Controle de carga por lote (linha 2). 1 linha por lote entregue pela origem';
 COMMENT ON COLUMN ctrl.lote.declarado_vnf IS 'Soma de vNF declarada pela origem: ponto de partida da conferência dos números';
 
@@ -45,5 +63,10 @@ SELECT l.*,
        extract(epoch FROM l.custodiado_em - l.recebido_em)::int                      AS seg_custodia,
        extract(epoch FROM l.carregado_em  - l.custodiado_em)::int                    AS seg_bronze,
        extract(epoch FROM l.processado_em - l.carregado_em)::int                     AS seg_transformacao,
-       extract(epoch FROM coalesce(l.processado_em, now()) - l.recebido_em)::int     AS seg_total
+       -- lote terminado: duração da carga até a última etapa concluída. Em andamento ou ERRO: há quanto tempo
+       -- está aberto (cresce até alguém agir). Antes usava coalesce(processado_em, now()) e virava a idade do
+       -- lote, porque processado_em só existe a partir da gold.
+       extract(epoch FROM CASE WHEN l.status IN ('CARREGADO', 'INCOMPLETO', 'PROCESSADO')
+                               THEN greatest(l.custodiado_em, l.carregado_em, l.processado_em)
+                               ELSE now() END - l.recebido_em)::int                  AS seg_total
 FROM ctrl.lote l;

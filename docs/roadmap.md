@@ -8,7 +8,7 @@ as regras de qualidade daquela etapa. Um marco só fecha quando o critério de p
 | **0. Planejamento** | escopo, mapa das quatro linhas, cenário, arquitetura, decisões | documentos revisados e perguntas em aberto respondidas | concluído |
 | **1. Fundação** | `docker compose` (Postgres, Silo, Airflow, Grafana); bucket `nfe-raw`; schemas e tabelas `ctrl` e `custodia` | stack sobe do zero com um comando; teste de versionamento e bloqueio de objeto registrado em D003 | em validação |
 | **2. Origem** | gerador do Grupo Xis: 5 CNPJs, 15 UFs, 6 operações, cancelamentos, arquivo de controle com totais, manifesto | notas válidas no XSD; soma do controle = soma dos XMLs; manifesto lista toda anomalia injetada | em validação |
-| **3. Raw e bronze** | `dag_nfe_saida` até a bronze; custódia com inventário; `ctrl.lote` | lote completo → `CARREGADO`; lote pela metade → `INCOMPLETO`; reenvio preservado; bronze reconstruída do raw com a mesma contagem | a fazer |
+| **3. Raw e bronze** | `dag_nfe_saida` até a bronze; custódia com inventário; `ctrl.lote` | lote completo → `CARREGADO`; lote pela metade → `INCOMPLETO`; reenvio preservado; bronze reconstruída do raw com a mesma contagem | em validação |
 | **4. Silver** | modelos dbt de nota, item, evento e situação; quarentena; regras de aviso em `ctrl.dq` | bronze = válidos + quarentena; gabarito 100%; cancelamento que chega depois muda a situação da nota | a fazer |
 | **5. Gold** | dimensões, fatos, agregado mensal; `ctrl.reconciliacao` | quatro métricas iguais da origem à gold; cancelada fora do total; devolução com sinal negativo | a fazer |
 | **6. Dashboard** | página única em Grafana, como código, com o selo | indicadores do topo iguais ao recálculo independente na silver; consultas na suíte de testes | a fazer |

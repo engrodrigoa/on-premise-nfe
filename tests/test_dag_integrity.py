@@ -13,7 +13,7 @@ pytest.importorskip("airflow.sdk", reason="Airflow 3 não instalado (roda no job
 pytestmark = pytest.mark.airflow
 
 PASTA_DAGS = Path(__file__).resolve().parents[1] / "airflow" / "dags"
-DAGS_ESPERADAS = {"dag_fundacao_smoke"}
+DAGS_ESPERADAS = {"dag_fundacao_smoke", "dag_nfe_saida"}
 
 
 @pytest.fixture(scope="module")
@@ -45,3 +45,15 @@ def test_dag_de_smoke_tem_as_tres_verificacoes_em_ordem(dagbag_e_avisos):
     assert {t.task_id for t in dag.tasks} == {"postgres_schemas", "bucket_custodia", "dbt_debug"}
     assert dag.get_task("bucket_custodia").upstream_task_ids == {"postgres_schemas"}
     assert dag.get_task("dbt_debug").upstream_task_ids == {"bucket_custodia"}
+
+
+def test_dag_de_carga_encadeia_as_etapas_do_lote(dagbag_e_avisos):
+    bag, _ = dagbag_e_avisos
+    dag = bag.dags["dag_nfe_saida"]
+    ordem = ["aguardar_lote", "reservar_lote", "custodiar_lote", "carregar_bronze", "concluir_lote",
+             "ha_mais_lotes", "proximo_lote"]
+    assert {t.task_id for t in dag.tasks} == set(ordem)
+    for anterior, atual in zip(ordem, ordem[1:]):
+        assert dag.get_task(atual).upstream_task_ids == {anterior}
+    assert dag.max_active_runs == 1          # um lote por vez: a reserva da pasta depende disso
+    assert dag.get_task("custodiar_lote").retries == 2

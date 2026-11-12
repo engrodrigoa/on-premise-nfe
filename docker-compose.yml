@@ -121,7 +121,7 @@ services:
       - |
         set -e
         mkdir -p /opt/airflow/logs /mnt/datasource/nfe/inbox /mnt/datasource/nfe/processando \
-                 /mnt/datasource/nfe/processados /opt/airflow/dbt_vol/target /opt/airflow/dbt_vol/logs
+                 /mnt/datasource/nfe/processados /mnt/datasource/nfe/rejeitados /opt/airflow/dbt_vol/target /opt/airflow/dbt_vol/logs
         chown -R "${AIRFLOW_UID:-1000}:0" /opt/airflow/logs /mnt/datasource /opt/airflow/dbt_vol
         # migra o banco de metadados e cria o admin (comportamento do entrypoint oficial)
         /entrypoint airflow version

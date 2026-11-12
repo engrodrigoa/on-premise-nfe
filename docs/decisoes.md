@@ -150,3 +150,22 @@ os padrões de antes. A D011 continua valendo como padrão; a variável é a sa�
 **Consequência:** nada muda dentro da rede do compose (`S3_ENDPOINT` segue `http://minio:9000`). Quem já tem
 `.env` precisa acrescentar a variável. O `S3_ENDPOINT` do `.env` (usado só fora do compose) deve acompanhar
 `MINIO_API_PORT` se ela mudar.
+
+## D016 — Objeto endereçado pelo conteúdo, recebimento por arquivo e bronze lida do raw
+
+**Contexto:** o inventário (`custodia.documento`) tem uma linha por objeto. O reenvio idêntico precisa
+aparecer na contagem do lote sem duplicar a custódia, a bronze tem uma linha por arquivo recebido e precisa ser
+reconstruível a partir do raw. Com só o inventário, um arquivo reenviado não teria de onde ser reconstruído.
+**Decisão:** a chave do objeto é derivada do conteúdo: `nfe/AAAA/MM/<chave>/<sha256>.xml` (e `evento/...`,
+`invalido/<sha256>.xml` para o ilegível). `custodia.recebimento` registra cada arquivo entregue em cada lote e
+aponta para o objeto, com o sha256 recebido e o declarado no romaneio. A bronze é carregada a partir do
+recebimento, lendo do bucket pela versão registrada e conferindo o hash, e não da pasta de rede. A conferência
+contra o romaneio fica em `ctrl.lote_divergencia` (FALTANTE, NAO_DECLARADO, HASH_DIVERGENTE). Arquivo faltante
+ou fora do romaneio deixa o lote `INCOMPLETO`; hash divergente não, porque o arquivo chegou e a quarentena
+da silver decide o destino dele (D007). A segunda entrega de um lote já carregado é recusada e vai para
+`rejeitados/`.
+**Consequência:** reenvio idêntico = um objeto, dois recebimentos. Mesma chave com conteúdo diferente = dois
+objetos na mesma pasta da chave. Toda carga da bronze lê o raw, então a reconstrução é o caminho de sempre e
+não um procedimento de exceção; `make teste-bronze` prova isso comparando uma bronze paralela com a real.
+O PUT envia o sha256 (`x-amz-checksum-sha256`) e o object store recusa o objeto se o conteúdo chegar diferente.
+
