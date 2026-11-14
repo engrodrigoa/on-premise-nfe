@@ -1,0 +1,355 @@
+# Contratos da silver (marco 4): tipos gerados do que o Postgres materializou; a build falha se um modelo mudar
+# de coluna ou de tipo sem este arquivo mudar junto. Unicidade composta: dbt/tests/.
+version: 2
+models:
+- name: documento
+  description: Destino de cada linha da bronze (valido, quarentena, reenvio_descartado). Fechamento D020.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: bronze_id
+    data_type: bigint
+    data_tests:
+    - unique
+    - not_null
+  - name: lote_id
+    data_type: bigint
+  - name: arquivo
+    data_type: text
+  - name: sha256
+    data_type: char(64)
+  - name: tipo_documento
+    data_type: text
+  - name: chave
+    data_type: text
+  - name: chave_origem
+    data_type: text
+  - name: chave_valida
+    data_type: boolean
+  - name: emit_cnpj
+    data_type: text
+  - name: serie
+    data_type: integer
+  - name: nnf
+    data_type: bigint
+  - name: tp_evento
+    data_type: text
+  - name: n_seq_evento
+    data_type: integer
+  - name: destino
+    data_type: text
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - valido
+          - quarentena
+          - reenvio_descartado
+  - name: motivo
+    data_type: text
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('cat_regra_qualidade')
+          field: regra
+  - name: bronze_id_vigente
+    data_type: bigint
+  - name: erro_leitura
+    data_type: text
+  - name: carregado_em
+    data_type: timestamptz
+- name: quarentena
+  description: Arquivos barrados com o motivo (D007). Recalculada a cada carga.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: bronze_id
+    data_type: bigint
+  - name: lote_id
+    data_type: bigint
+  - name: nome_lote
+    data_type: text
+  - name: arquivo
+    data_type: text
+  - name: tipo_documento
+    data_type: text
+  - name: chave
+    data_type: text
+  - name: motivo
+    data_type: text
+    data_tests:
+    - not_null
+  - name: descricao_motivo
+    data_type: text
+  - name: quem_age
+    data_type: text
+  - name: sha256
+    data_type: char(64)
+  - name: erro_leitura
+    data_type: text
+  - name: carregado_em
+    data_type: timestamptz
+- name: nfe_nota
+  description: 'Cabeçalho da NF-e válida: 1 linha por chave. CPF só como hash.'
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: chave
+    data_type: text
+    data_tests:
+    - unique
+    - not_null
+  - name: lote_id
+    data_type: bigint
+  - name: bronze_id
+    data_type: bigint
+  - name: arquivo
+    data_type: text
+  - name: sha256
+    data_type: char(64)
+  - name: modelo
+    data_type: text
+  - name: serie
+    data_type: integer
+  - name: nnf
+    data_type: bigint
+  - name: dh_emissao
+    data_type: timestamptz
+  - name: dt_emissao
+    data_type: date
+  - name: nat_op
+    data_type: text
+  - name: tp_nf
+    data_type: text
+  - name: fin_nfe
+    data_type: text
+  - name: id_dest
+    data_type: text
+  - name: ind_final
+    data_type: text
+  - name: chave_referenciada
+    data_type: text
+  - name: emit_cnpj
+    data_type: text
+  - name: emit_uf
+    data_type: text
+  - name: emit_cod_municipio
+    data_type: text
+  - name: dest_tipo
+    data_type: text
+  - name: dest_cnpj
+    data_type: text
+  - name: dest_cpf_hash
+    data_type: text
+  - name: dest_nome
+    data_type: text
+  - name: dest_uf
+    data_type: text
+  - name: dest_cod_municipio
+    data_type: text
+  - name: v_prod
+    data_type: numeric(15,2)
+  - name: v_bc_icms
+    data_type: numeric(15,2)
+  - name: v_icms
+    data_type: numeric(15,2)
+  - name: v_ipi
+    data_type: numeric(15,2)
+  - name: v_pis
+    data_type: numeric(15,2)
+  - name: v_cofins
+    data_type: numeric(15,2)
+  - name: v_nf
+    data_type: numeric(15,2)
+    data_tests:
+    - not_null
+  - name: v_bc_ibscbs
+    data_type: numeric(15,2)
+  - name: v_ibs_uf
+    data_type: numeric(15,2)
+  - name: v_ibs_mun
+    data_type: numeric(15,2)
+  - name: v_ibs
+    data_type: numeric(15,2)
+  - name: v_cbs
+    data_type: numeric(15,2)
+  - name: n_prot
+    data_type: text
+  - name: dh_recebimento
+    data_type: timestamptz
+  - name: c_stat
+    data_type: text
+- name: nfe_item
+  description: 'Itens das notas válidas: 1 linha por (chave, n_item).'
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: chave
+    data_type: text
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('nfe_nota')
+          field: chave
+  - name: n_item
+    data_type: integer
+  - name: lote_id
+    data_type: bigint
+  - name: c_prod
+    data_type: text
+  - name: x_prod
+    data_type: text
+  - name: ncm
+    data_type: text
+  - name: cfop
+    data_type: text
+  - name: u_com
+    data_type: text
+  - name: q_com
+    data_type: numeric(15,4)
+  - name: v_un_com
+    data_type: numeric(21,10)
+  - name: v_prod
+    data_type: numeric(15,2)
+  - name: orig
+    data_type: text
+  - name: cst_icms
+    data_type: text
+  - name: v_bc_icms
+    data_type: numeric(15,2)
+  - name: p_icms
+    data_type: numeric(7,4)
+  - name: v_icms
+    data_type: numeric(15,2)
+  - name: cst_ipi
+    data_type: text
+  - name: v_ipi
+    data_type: numeric(15,2)
+  - name: cst_pis
+    data_type: text
+  - name: v_pis
+    data_type: numeric(15,2)
+  - name: cst_cofins
+    data_type: text
+  - name: v_cofins
+    data_type: numeric(15,2)
+  - name: cst_ibscbs
+    data_type: text
+  - name: cclasstrib
+    data_type: text
+  - name: v_bc_ibscbs
+    data_type: numeric(15,2)
+  - name: p_ibs_uf
+    data_type: numeric(7,4)
+  - name: v_ibs_uf
+    data_type: numeric(15,2)
+  - name: p_ibs_mun
+    data_type: numeric(7,4)
+  - name: v_ibs_mun
+    data_type: numeric(15,2)
+  - name: v_ibs
+    data_type: numeric(15,2)
+  - name: p_cbs
+    data_type: numeric(7,4)
+  - name: v_cbs
+    data_type: numeric(15,2)
+- name: nfe_evento
+  description: 'Eventos válidos (cancelamento): 1 linha por (chave, tp_evento, n_seq_evento).'
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: chave
+    data_type: text
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('nfe_nota')
+          field: chave
+  - name: tp_evento
+    data_type: text
+  - name: n_seq_evento
+    data_type: integer
+  - name: lote_id
+    data_type: bigint
+  - name: bronze_id
+    data_type: bigint
+  - name: arquivo
+    data_type: text
+  - name: sha256
+    data_type: char(64)
+  - name: desc_evento
+    data_type: text
+  - name: dh_evento
+    data_type: timestamptz
+  - name: emit_cnpj
+    data_type: text
+  - name: n_prot_nota
+    data_type: text
+  - name: justificativa
+    data_type: text
+  - name: c_stat
+    data_type: text
+  - name: n_prot_evento
+    data_type: text
+  - name: dh_registro
+    data_type: timestamptz
+- name: nfe_situacao
+  description: 'Situação da nota derivada dos eventos (D006): autorizada ou cancelada.'
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: chave
+    data_type: text
+    data_tests:
+    - unique
+    - not_null
+  - name: lote_id_nota
+    data_type: bigint
+  - name: situacao
+    data_type: text
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - autorizada
+          - cancelada
+  - name: dh_cancelamento
+    data_type: timestamptz
+  - name: lote_id_cancelamento
+    data_type: bigint
+  - name: chegada_cancelamento
+    data_type: text
+- name: nfe_aviso
+  description: 'Avisos fiscais (D007): a nota segue para a gold. 1 linha por (chave, regra).'
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: chave
+    data_type: text
+  - name: lote_id
+    data_type: bigint
+  - name: regra
+    data_type: text
+    data_tests:
+    - not_null
+    - relationships:
+        arguments:
+          to: ref('cat_regra_qualidade')
+          field: regra
+  - name: detalhe
+    data_type: text
+  - name: emit_cnpj
+    data_type: text
+  - name: dt_emissao
+    data_type: date

@@ -183,6 +183,7 @@ ficam de fora.
 `docs/05_dashboard.md`; mudar um limite é mudar os dois.
 
 > Revista em parte pela D018: volume entra como contexto e como sinal de anomalia.
+> Revista em parte pela D025: a linha 3 (qualidade do conteúdo) ganha uma terceira página.
 
 ## D018 — Volume no painel de operação: contexto e anomalia, não contador
 
@@ -197,4 +198,83 @@ diária de XML e lotes. Execuções e falhas do Airflow ficam de fora: são em m
 banco do Airflow (fora do alcance da `grafana_ro`), e a falha que importa já vira `ERRO` em `ctrl.lote`.
 **Consequência:** o painel passa de 8 para 13 elementos, mas mantém a hierarquia: veredito, contexto, ação,
 séries, detalhe. Sem pelo menos 2 semanas de histórico, o indicador de volume mostra "histórico curto".
+
+## D019 — Falha da silver aparece em `ctrl.lote` sem apagar o status da entrega
+
+**Contexto:** `marcar_erro` não mexe em lote `CARREGADO`, `INCOMPLETO` ou `PROCESSADO` (os estados finais da
+carga). Com o dbt depois de `carregar_bronze`, uma falha da silver ficaria verde em `ctrl.lote` e só apareceria
+na cor da execução do Airflow, contra a regra "execução verde não é carga saudável". Trocar o status para `ERRO`
+apagaria a informação de que a entrega veio incompleta.
+**Decisão:** `ctrl.lote` ganha `transformado_em` (primeira vez que a silver incluiu o lote) e
+`erro_transformacao`. As tasks da silver têm callback próprio, que grava a falha nessa coluna e deixa o status
+como está; o próximo registro bem-sucedido limpa. Lote `CARREGADO` ou `INCOMPLETO` há mais de 30 min sem
+`transformado_em` também é falha de processo no painel de saúde.
+**Consequência:** o status continua dizendo como a entrega chegou, e a silver tem a sua própria evidência. Lotes
+carregados antes do marco 4 aparecem como falha até a primeira execução da silver (`make silver` ou a próxima
+carga).
+
+## D020 — Fechamento da silver: bronze = válidos + quarentena + reenvios descartados
+
+**Contexto:** o critério do roadmap era "bronze = válidos + quarentena". Mas o reenvio idêntico gera duas
+linhas na bronze (D016: um objeto, dois recebimentos) e um documento só. A conta nunca fecharia, ou o reenvio
+teria de ir para a quarentena, que é para documento que não é íntegro (D007).
+**Decisão:** `silver.documento` dá um destino a cada linha da bronze: `valido`, `quarentena` (com motivo) ou
+`reenvio_descartado` (aponta para o documento que vale). O fechamento é feito por lote no dbt (teste) e no
+registro (`pipelines/qualidade/registrar.py`), que quebra a task se a silver não cobrir a bronze inteira.
+**Consequência:** `ctrl.lote` ganha `qtd_reenvios` e `ctrl.v_lote` ganha `silver_fechada`. Nenhum arquivo some
+entre a bronze e a silver sem deixar rastro, e reenvio não infla a quarentena.
+
+## D021 — Silver recriada inteira a partir da bronze a cada carga
+
+**Contexto:** o datalabs usa merge incremental por chave, filtrado pelos lotes pendentes. Aqui o evento pode
+chegar antes da nota (fica em quarentena e precisa ser reavaliado) e o cancelamento pode chegar dias depois
+(muda a situação de uma nota de outro lote). O volume é de ~25 mil notas por ano.
+**Decisão:** todos os modelos da silver são `table`, recriados a cada execução. A bronze é a fonte e já é
+reconstruível do raw (D003), então a silver é sempre função da bronze.
+**Consequência:** reavaliação e situação saem sem lógica extra, e uma regra nova vale para o histórico na
+próxima carga (útil na transição da reforma). Os números de `ctrl.lote` são a fotografia atual; o que se sabia
+em cada momento fica em `ctrl.dq`, que só ganha linha quando o número muda. Gatilho para rever: `dbt build` da
+silver acima de 5 minutos (16 lotes levaram cerca de 7 s no ambiente de teste).
+
+## D022 — Mesma chave com outro conteúdo: vale o primeiro recebido
+
+**Contexto:** a nota autorizada é um fato jurídico único; dois XMLs diferentes para a mesma chave significam que
+um deles não é o autorizado. Sem validar assinatura (D010), o pipeline não sabe qual. O datalabs adota "vale o
+mais recente", o que deixaria um reenvio adulterado substituir em silêncio uma nota já carregada.
+**Decisão:** vale o primeiro recebido (menor lote). No mesmo lote, vale o arquivo com o nome no padrão da origem
+(`<chave>-procNFe.xml`) e, depois, a ordem de chegada na bronze. O outro conteúdo vai para a quarentena com o
+motivo `chave_conteudo_divergente`; conteúdo idêntico é `reenvio_descartado` (D020). A mesma regra vale para
+eventos, pela chave, tipo e sequência.
+**Consequência:** o número já publicado não muda por causa de um reenvio. O alerta de custódia
+(`custodia.v_chave_com_conteudos_diferentes`) e a quarentena apontam o mesmo caso para o fiscal decidir.
+
+## D023 — Lote `INCOMPLETO` também segue para a silver
+
+**Contexto:** `INCOMPLETO` diz que faltou arquivo (ou chegou arquivo fora do romaneio). Os que chegaram são
+notas válidas por si.
+**Decisão:** a silver processa toda a bronze, sem filtrar por status do lote. A falha de entrega continua
+acusada no status e no painel de saúde.
+**Consequência:** o fiscal vê as notas que chegaram sem esperar o runbook de reenvio (marco 7). O faltante entra
+quando a origem o entregar, e a silver recalcula o que depender dele (salto de numeração, evento sem nota).
+
+## D024 — Agenda horária com sensor de 55 minutos
+
+**Contexto:** a agenda de 10 em 10 minutos gerava cerca de 140 execuções vazias por dia (pendência do marco 3),
+poluindo o histórico do Airflow. Disparo por chegada de arquivo exigiria um gatilho de evento que o Airflow 3.4
+não traz pronto para pasta.
+**Decisão:** `@hourly`, com o sensor em modo `reschedule` olhando a inbox a cada 60 s por até 55 minutos. Havendo
+fila, a execução continua disparando a próxima no fim (`proximo_lote`).
+**Consequência:** 24 execuções por dia, e o lote publicado entra em cerca de um minuto, como antes. O sensor em
+`reschedule` não ocupa um slot de execução enquanto espera.
+
+## D025 — Terceira página no Grafana: qualidade do conteúdo
+
+**Contexto:** a D017 deixou a página de operação para a linha 2, com teste que limita o número de painéis e o
+leiaute a uma tela. A quarentena e os avisos respondem a outra pergunta (o conteúdo é válido?), para outro
+público (TI do ERP e fiscal).
+**Decisão:** página própria, "NF-e · Qualidade do conteúdo" (uid `nfe-qualidade`), lendo só `ctrl.dq` e
+`ctrl.v_lote`. O registro da silver grava em `ctrl.dq` também os motivos de quarentena (severidade `erro`), além
+dos avisos, para o painel não precisar ler a silver (D009). Na página de operação entra só a falha da silver (D019).
+**Consequência:** a role `grafana_ro` não muda, e o detalhe com dado pessoal continua só na silver. A página de
+negócio do marco 6 pode apontar para esta como apontará para a de saúde.
 

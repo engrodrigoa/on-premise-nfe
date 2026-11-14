@@ -128,6 +128,23 @@ def test_painel_acusa_o_cenario_plantado(painel, conexao_db):
     assert acao[0][0] == "CRÍTICO"                       # o crítico vem primeiro
 
 
+def test_painel_acusa_falha_da_silver(painel, conexao_db):
+    """D019: dbt que falhou, ou lote carregado há mais de 30 min fora da silver, é falha de processo."""
+    cur = conexao_db.cursor()
+    antes = _valor(cur, painel, "Falhas de processo")
+    tag = "lote_8887-01-0"
+    _lote(cur, tag + "1", "CARREGADO", carregado_em="now", erro_transformacao="transformar_silver: exit 1")
+    _lote(cur, tag + "2", "CARREGADO", carregado_em="now")
+    cur.execute("UPDATE ctrl.lote SET carregado_em = now() - interval '2 hours' WHERE nome_lote = %s", (tag + "2",))
+    _lote(cur, tag + "3", "CARREGADO", carregado_em="now")                 # recém-carregado: ainda no prazo
+    _lote(cur, tag + "4", "CARREGADO", carregado_em="now", transformado_em="now")
+
+    assert _valor(cur, painel, "Falhas de processo") == antes + 2
+    acao = _como_grafana(cur, _sql(painel, "O que exige ação"))
+    nossas = {(onde, texto.split(":")[0].split(" há ")[0]) for _, _, onde, texto, _ in acao if onde.startswith(tag)}
+    assert nossas == {(tag + "1", "silver falhou"), (tag + "2", "carregado")}
+
+
 def test_todas_as_consultas_rodam_como_grafana(painel, conexao_db):
     cur = conexao_db.cursor()
     for p in painel["panels"]:

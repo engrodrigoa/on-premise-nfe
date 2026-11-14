@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS ctrl.lote_divergencia (
     registrado_em     timestamptz NOT NULL DEFAULT now(),
     UNIQUE (lote_id, arquivo, tipo)
 );
+-- Marco 4: a silver (D019, D020). Recriada inteira a cada carga (D021), então estes números são a fotografia
+-- atual do lote, e não o que se sabia quando ele chegou (esse histórico fica em ctrl.dq).
+ALTER TABLE ctrl.lote ADD COLUMN IF NOT EXISTS qtd_reenvios        int;          -- cópia idêntica de documento que já vale
+ALTER TABLE ctrl.lote ADD COLUMN IF NOT EXISTS transformado_em     timestamptz;  -- 1ª vez que a silver incluiu o lote
+ALTER TABLE ctrl.lote ADD COLUMN IF NOT EXISTS erro_transformacao  text;         -- falha da silver; limpa no próximo sucesso
+
 COMMENT ON TABLE ctrl.lote_divergencia IS 'Linha 2: arquivo do lote que não confere com o romaneio da origem';
 
 COMMENT ON TABLE  ctrl.lote IS 'Controle de carga por lote (linha 2). 1 linha por lote entregue pela origem';
@@ -60,9 +66,12 @@ DROP VIEW IF EXISTS ctrl.v_lote;
 CREATE VIEW ctrl.v_lote AS
 SELECT l.*,
        (l.declarado_arquivos IS NOT NULL AND l.qtd_arquivos = l.declarado_arquivos) AS entrega_completa,
+       -- fechamento da silver (D020): cada linha da bronze cai em exatamente um destino
+       (l.qtd_bronze = l.qtd_validos + l.qtd_quarentena + l.qtd_reenvios)           AS silver_fechada,
        extract(epoch FROM l.custodiado_em - l.recebido_em)::int                      AS seg_custodia,
        extract(epoch FROM l.carregado_em  - l.custodiado_em)::int                    AS seg_bronze,
-       extract(epoch FROM l.processado_em - l.carregado_em)::int                     AS seg_transformacao,
+       -- silver medida à parte: um lote carregado antes do marco 4 recebe transformado_em dias depois
+       extract(epoch FROM l.transformado_em - l.carregado_em)::int                   AS seg_transformacao,
        -- lote terminado: duração da carga até a última etapa concluída. Em andamento ou ERRO: há quanto tempo
        -- está aberto (cresce até alguém agir). Antes usava coalesce(processado_em, now()) e virava a idade do
        -- lote, porque processado_em só existe a partir da gold.

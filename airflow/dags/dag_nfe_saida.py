@@ -1,23 +1,30 @@
-"""Carga das NF-e de saída do Grupo Xis: um lote por execução, da pasta de rede até a bronze (marco 3).
+"""Carga das NF-e de saída do Grupo Xis: um lote por execução, da pasta de rede até a silver (marcos 3 e 4).
 
-    aguardar_lote -> reservar_lote -> custodiar_lote -> carregar_bronze -> concluir_lote -> ha_mais_lotes -> proximo_lote
+    aguardar_lote -> reservar_lote -> custodiar_lote -> carregar_bronze -> concluir_lote
+                  -> transformar_silver -> registrar_silver -> ha_mais_lotes -> proximo_lote
 
-- Agenda a cada 10 minutos; o sensor espera até 9 minutos por um lote e, sem lote, pula a execução (skip).
+- Agenda de hora em hora (D024); o sensor olha a inbox a cada minuto por até 55 minutos e, sem lote, pula a
+  execução (skip). Lote publicado entra em até ~1 minuto, com 24 execuções por dia em vez de ~144.
 - Um lote por execução, do mais antigo para o mais novo (max_active_runs=1). Havendo fila na inbox, a
   execução dispara a próxima no fim, em vez de esperar a agenda.
-- Toda a lógica está em pipelines/carga/lote.py. A DAG só encadeia.
-- Saúde da carga: ctrl.lote, não a cor da execução. Falha definitiva de uma task marca o lote como ERRO.
-
-Silver e gold (dbt) entram no marco 4, depois de carregar_bronze.
+- Toda a lógica está em pipelines/ e no dbt. A DAG só encadeia.
+- A pasta do lote sai de processando/ antes do dbt: falha na silver não refaz custódia nem bronze.
+- Silver: `dbt build` da pasta models/silver, recriada inteira a partir da bronze (D021), e depois o registro
+  nas tabelas de controle (pipelines/qualidade/registrar.py). Lote INCOMPLETO também passa (D023).
+- Saúde da carga: ctrl.lote, não a cor da execução. Falha definitiva até a bronze marca o lote como ERRO;
+  falha na silver fica em ctrl.lote.erro_transformacao, sem apagar o status da entrega (D019).
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.sdk import BaseSensorOperator, Param, PokeReturnValue, dag, get_current_context, task
 
 DAG_ID = "dag_nfe_saida"
+DBT_SILVER = ('"$DBT_BIN" build --select +path:models/silver '
+              '--project-dir "$DBT_PROJECT_DIR" --profiles-dir "$DBT_PROFILES_DIR"')
 
 
 class LoteNaInboxSensor(BaseSensorOperator):
@@ -49,9 +56,21 @@ def _marcar_erro(context) -> None:
         marcar_erro(carregar(), nome, f"{ti.task_id}: {erro!r}")
 
 
+def _marcar_erro_silver(context) -> None:
+    """on_failure_callback da silver (D019): registra a falha sem trocar o status da entrega."""
+    from pipelines.commons.config import carregar
+    from pipelines.qualidade.registrar import marcar_erro_transformacao
+
+    ti = context["ti"]
+    nome = ti.xcom_pull(task_ids="aguardar_lote")
+    if nome:
+        erro = context.get("exception")
+        marcar_erro_transformacao(carregar(), nome, f"{ti.task_id}: {erro!r}")
+
+
 @dag(
     dag_id=DAG_ID,
-    schedule="*/10 * * * *",
+    schedule="@hourly",
     start_date=datetime(2026, 1, 1),
     catchup=False,
     max_active_runs=1,
@@ -95,8 +114,20 @@ def dag_nfe_saida():
 
         return concluir(carregar(), lote["nome"])
 
+    transformar_silver = BashOperator(task_id="transformar_silver", bash_command=DBT_SILVER,
+                                      on_failure_callback=_marcar_erro_silver)
+
+    @task(on_failure_callback=_marcar_erro_silver)
+    def registrar_silver() -> dict:
+        from pipelines.commons.config import carregar
+        from pipelines.qualidade.registrar import registrar
+
+        resumo = registrar(carregar(), get_current_context()["run_id"])
+        print(f"silver: {resumo}")
+        return resumo
+
     @task.short_circuit
-    def ha_mais_lotes(_destino: str) -> bool:
+    def ha_mais_lotes(_resumo: dict) -> bool:
         from pipelines.carga.lote import lotes_prontos
         from pipelines.commons.config import carregar
 
@@ -107,10 +138,13 @@ def dag_nfe_saida():
     proximo = TriggerDagRunOperator(task_id="proximo_lote", trigger_dag_id=DAG_ID, retries=0,
                                     on_failure_callback=None)
 
-    aguardar = LoteNaInboxSensor(task_id="aguardar_lote", poke_interval=30, timeout=9 * 60, mode="reschedule",
+    aguardar = LoteNaInboxSensor(task_id="aguardar_lote", poke_interval=60, timeout=55 * 60, mode="reschedule",
                                  soft_fail=True)
     lote = reservar_lote(aguardar.output)
-    ha_mais_lotes(concluir_lote(carregar_bronze(custodiar_lote(lote)))) >> proximo
+    concluido = concluir_lote(carregar_bronze(custodiar_lote(lote)))
+    registrado = registrar_silver()
+    concluido >> transformar_silver >> registrado
+    ha_mais_lotes(registrado) >> proximo
 
 
 dag_nfe_saida()

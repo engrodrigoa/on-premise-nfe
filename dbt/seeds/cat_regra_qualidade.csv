@@ -1,0 +1,15 @@
+regra,severidade,linha,descricao,quem_age
+xml_corrompido,erro,3,arquivo que não é XML bem formado (truncado no transporte),TI do ERP
+documento_desconhecido,erro,3,XML legível que não é procNFe nem procEventoNFe,TI do ERP
+chave_invalida,erro,3,chave de acesso ausente ou com dígito verificador errado,TI do ERP
+sem_autorizacao,erro,3,sem protocolo de autorização ou cStat diferente de autorizado,TI do ERP
+emitente_fora_do_grupo,erro,3,emitente não é um dos estabelecimentos do grupo,TI do ERP
+chave_conteudo_divergente,erro,3,mesma chave já recebida com outro conteúdo; vale o primeiro (D022),Fiscal
+evento_sem_nota,erro,3,evento cuja nota ainda não chegou; é reavaliado a cada carga,TI do ERP
+tot_cbs_divergente,aviso,3,total de CBS diferente da soma dos itens,Fiscal
+vbc_ibscbs_divergente,aviso,3,base de IBS e CBS do total diferente da soma dos itens,Fiscal
+cclasstrib_incoerente,aviso,3,combinação CST x cClassTrib fora da tabela vigente,Fiscal
+aliquota_ibscbs_divergente,aviso,3,alíquota de IBS ou CBS diferente da tabela vigente,Fiscal
+numeracao_com_salto,aviso,3,número anterior da série não recebido,Fiscal
+devolucao_ref_inexistente,aviso,3,devolução que referencia nota não recebida,Fiscal
+cancelamento_fora_do_prazo,aviso,3,cancelamento registrado depois do prazo vigente,Fiscal

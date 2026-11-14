@@ -1,0 +1,816 @@
+{
+  "uid": "nfe-qualidade",
+  "title": "NF-e · Qualidade do conteúdo",
+  "description": "O conteúdo que chegou é válido? Linha 3 do pipeline: quarentena (erro) e avisos fiscais (a nota segue). Lê só ctrl.dq e ctrl.v_lote, na situação mais recente de cada lote.",
+  "tags": [
+    "nfe",
+    "qualidade"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "graphTooltip": 0,
+  "refresh": "5m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "schemaVersion": 41,
+  "version": 1,
+  "links": [
+    {
+      "title": "Saúde da carga",
+      "type": "link",
+      "url": "/d/nfe-saude-carga",
+      "icon": "dashboard",
+      "tooltip": "a carga rodou e não perdeu nada?"
+    },
+    {
+      "title": "Airflow",
+      "type": "link",
+      "url": "http://localhost:8080/dags/dag_nfe_saida",
+      "targetBlank": true,
+      "icon": "external link",
+      "tooltip": "DAG de carga"
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Arquivos em quarentena",
+      "description": "Arquivos que não são um documento íntegro do grupo (D007): XML corrompido, emitente estranho, chave com dois conteúdos, evento sem nota. Conta a situação atual de cada lote do período (o evento que ganhou a nota sai da conta). Não é falha do pipeline. Quem age: TI do ERP (reenvio) ou Fiscal.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH atual AS (\n  SELECT DISTINCT ON (lote_id, regra) lote_id, regra, severidade, qtd_avaliados, qtd_falhas\n    FROM ctrl.dq\n   ORDER BY lote_id, regra, executado_em DESC, dq_id DESC\n)\nSELECT coalesce(sum(a.qtd_falhas), 0) AS arquivos\n  FROM atual a JOIN ctrl.lote l USING (lote_id)\n WHERE a.severidade = 'erro' AND $__timeFilter(l.recebido_em)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Avisos fiscais",
+      "description": "Inconsistências fiscais em notas válidas (D007): a nota segue para a gold e o aviso vai para o fiscal. Uma nota pode ter mais de um aviso. Regras e vigências em dbt/seeds, todas \"a validar\" (D008). Quem age: Fiscal.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH atual AS (\n  SELECT DISTINCT ON (lote_id, regra) lote_id, regra, severidade, qtd_avaliados, qtd_falhas\n    FROM ctrl.dq\n   ORDER BY lote_id, regra, executado_em DESC, dq_id DESC\n)\nSELECT coalesce(sum(a.qtd_falhas), 0) AS avisos\n  FROM atual a JOIN ctrl.lote l USING (lote_id)\n WHERE a.severidade = 'aviso' AND $__timeFilter(l.recebido_em)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Avisos por 100 notas",
+      "description": "Densidade dos avisos: quantos avisos a cada 100 notas válidas do período. Sobe de repente = mudança no ERP ou na regra fiscal. Laranja a partir de 5.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH atual AS (\n  SELECT DISTINCT ON (lote_id, regra) lote_id, regra, severidade, qtd_avaliados, qtd_falhas\n    FROM ctrl.dq\n   ORDER BY lote_id, regra, executado_em DESC, dq_id DESC\n)\nSELECT round(100.0 * sum(a.qtd_falhas) / nullif(sum(a.qtd_avaliados) FILTER (WHERE a.regra = 'tot_cbs_divergente'), 0), 1) AS por_100\n  FROM atual a JOIN ctrl.lote l USING (lote_id)\n WHERE a.severidade = 'aviso' AND $__timeFilter(l.recebido_em)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 5
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Silver em dia?",
+      "description": "A silver cobre tudo o que chegou? SIM quando nenhum lote tem falha da silver, nenhum lote carregado está há mais de 30 min fora dela e todo lote fecha bronze = válidos + quarentena + reenvios (D019, D020). Não depende do período. Quem age: Engenharia.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN count(*) = 0 THEN 'SIM' ELSE 'NÃO (' || count(*) || ' lote(s))' END AS em_dia\n  FROM ctrl.v_lote\n WHERE erro_transformacao IS NOT NULL\n    OR (status IN ('CARREGADO', 'INCOMPLETO') AND transformado_em IS NULL\n        AND carregado_em < now() - interval '30 minutes')\n    OR (transformado_em IS NOT NULL AND NOT silver_fechada)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "sem dados",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "SIM": {
+                  "color": "green",
+                  "index": 0
+                }
+              }
+            },
+            {
+              "type": "regex",
+              "options": {
+                "pattern": "^NÃO.*",
+                "result": {
+                  "color": "red",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^em_dia$/",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Quarentena por motivo",
+      "description": "Onde está o problema de origem. Uma linha por motivo com arquivos em quarentena no período. O detalhe arquivo a arquivo fica em silver.quarentena (fora do alcance do painel, por ter dado pessoal).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH atual AS (\n  SELECT DISTINCT ON (lote_id, regra) lote_id, regra, severidade, qtd_avaliados, qtd_falhas\n    FROM ctrl.dq\n   ORDER BY lote_id, regra, executado_em DESC, dq_id DESC\n)\nSELECT a.regra AS motivo, sum(a.qtd_falhas) AS arquivos,\n       count(*) FILTER (WHERE a.qtd_falhas > 0) AS lotes, max(l.recebido_em) AS ultimo\n  FROM atual a JOIN ctrl.lote l USING (lote_id)\n WHERE a.severidade = 'erro' AND a.qtd_falhas > 0 AND $__timeFilter(l.recebido_em)\n GROUP BY a.regra\n ORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "nenhum arquivo em quarentena",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "arquivos"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "arquivos"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lotes"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "lotes"
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ultimo"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "último lote"
+              },
+              {
+                "id": "custom.width",
+                "value": 170
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Avisos fiscais por regra",
+      "description": "O que o fiscal precisa revisar, por regra. % = notas com o aviso sobre as notas válidas dos lotes do período.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH atual AS (\n  SELECT DISTINCT ON (lote_id, regra) lote_id, regra, severidade, qtd_avaliados, qtd_falhas\n    FROM ctrl.dq\n   ORDER BY lote_id, regra, executado_em DESC, dq_id DESC\n)\nSELECT a.regra, sum(a.qtd_falhas) AS notas,\n       round(100.0 * sum(a.qtd_falhas) / nullif(sum(a.qtd_avaliados), 0), 2) AS pct,\n       count(*) FILTER (WHERE a.qtd_falhas > 0) AS lotes\n  FROM atual a JOIN ctrl.lote l USING (lote_id)\n WHERE a.severidade = 'aviso' AND $__timeFilter(l.recebido_em)\n GROUP BY a.regra\nHAVING sum(a.qtd_falhas) > 0\n ORDER BY 2 DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "nenhum aviso",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "notas"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "notas"
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pct"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "% das notas"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lotes"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "lotes"
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Quarentena e avisos por lote",
+      "description": "Um ponto por lote, na data em que chegou. Pico isolado = lote ruim na origem; degrau = mudança no ERP ou na regra.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH atual AS (\n  SELECT DISTINCT ON (lote_id, regra) lote_id, regra, severidade, qtd_avaliados, qtd_falhas\n    FROM ctrl.dq\n   ORDER BY lote_id, regra, executado_em DESC, dq_id DESC\n)\nSELECT l.recebido_em AS time,\n       sum(a.qtd_falhas) FILTER (WHERE a.severidade = 'erro')  AS quarentena,\n       sum(a.qtd_falhas) FILTER (WHERE a.severidade = 'aviso') AS avisos\n  FROM atual a JOIN ctrl.lote l USING (lote_id)\n WHERE $__timeFilter(l.recebido_em)\n GROUP BY l.lote_id, l.recebido_em\n ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "decimals": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Destino de cada arquivo, por lote",
+      "description": "Fechamento da linha 2 na silver (D020): bronze = válidos + quarentena + reenvios descartados. 'fecha' falso ou 'erro na silver' preenchido = Engenharia.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "nfe"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "nfe"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT nome_lote AS lote, status, qtd_bronze AS bronze, qtd_validos AS validos,\n       qtd_quarentena AS quarentena, qtd_reenvios AS reenvios, silver_fechada AS fecha,\n       transformado_em, erro_transformacao\n  FROM ctrl.v_lote\n WHERE $__timeFilter(recebido_em) AND qtd_bronze IS NOT NULL\n ORDER BY lote_id DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "nenhum lote no período",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "validos"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "válidos"
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bronze"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "bronze"
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "quarentena"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "quarentena"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reenvios"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "reenvios"
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "fecha"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "fecha"
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "transformado_em"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "na silver desde"
+              },
+              {
+                "id": "custom.width",
+                "value": 170
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "erro_transformacao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "erro na silver"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      }
+    }
+  ]
+}

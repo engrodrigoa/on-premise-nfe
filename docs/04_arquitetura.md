@@ -31,7 +31,7 @@ como perfil opcional do compose, se a operação pedir.
 | **Origem** | pasta `datasource/nfe/` | `inbox/`, `processando/<lote>/`, `processados/<lote>/` | passagem; nada é lido daqui depois da custódia |
 | **Raw (custódia)** | object store | bucket `nfe-raw` | imutável; versionado; retenção; a cópia com valor legal |
 | **Bronze** | Postgres `bronze` | `documento_xml` | XML bruto de notas e eventos, 1 linha por arquivo, só INSERT; reconstruível do raw (D013) |
-| **Silver** | Postgres `silver` | `nfe_nota`, `nfe_item`, `nfe_evento`, `nfe_situacao`, `nfe_quarentena` | tipada, com contrato; 1 linha por chave |
+| **Silver** | Postgres `silver` | `documento` (destino de cada arquivo), `quarentena`, `nfe_nota`, `nfe_item`, `nfe_evento`, `nfe_situacao`, `nfe_aviso`; seeds de regra fiscal com vigência | tipada, com contrato; recriada da bronze a cada carga (D021) |
 | **Gold** | Postgres `gold` | dimensões, `ft_nfe_item`, `ft_nfe_documento`, `ag_fiscal_mensal` | modelo dimensional para consumo |
 | **Controle** | Postgres `ctrl` e `custodia` | ver seção 4 | o que as linhas 2 e 3 gravam |
 
@@ -70,8 +70,8 @@ versão anterior de um objeto.
 |---|---|---|---|
 | `ctrl.lote` | lote × execução | 2 | o lote chegou inteiro, foi custodiado, ingerido e processado? quanto tempo levou? |
 | `ctrl.integridade_custodia` | verificação | 2 | os objetos custodiados continuam com o mesmo hash? |
-| `silver.nfe_quarentena` | arquivo barrado | 3 | o que não entrou, e por quê |
-| `ctrl.dq` | execução × regra | 3 | quantas notas caíram em cada regra de aviso |
+| `silver.quarentena` | arquivo barrado | 3 | o que não entrou, e por quê (detalhe, com dado pessoal: fora do painel) |
+| `ctrl.dq` | lote × regra, a cada mudança | 3 | quantos arquivos caíram em cada motivo de quarentena e quantas notas em cada aviso; linha nova só quando o número muda, e o histórico fica |
 | `ctrl.reconciliacao` | lote × fronteira × métrica | 3 e 4 | quantidade e valores iguais de uma camada para a outra? |
 
 Estados de `ctrl.lote`: `RECEBIDO → CUSTODIADO → CARREGADO → PROCESSADO`, com `INCOMPLETO` (chegou menos do
@@ -91,7 +91,7 @@ Cada linha guarda o valor esperado, o encontrado, a diferença e o status. O pai
 
 | DAG | Gatilho | Tarefas |
 |---|---|---|
-| `dag_nfe_saida` | sensor na `inbox/` | `aguardar_lote → reservar_lote → custodiar → carregar_bronze → dbt (silver, gold) → dq → reconciliar → fechar_lote → arquivar_lote` |
+| `dag_nfe_saida` | agenda horária + sensor na `inbox/` (D024) | hoje (marco 4): `aguardar_lote → reservar_lote → custodiar_lote → carregar_bronze → concluir_lote → transformar_silver → registrar_silver → ha_mais_lotes → proximo_lote`. Marco 5 acrescenta gold, reconciliação e fechamento do lote |
 | `dag_custodia_integridade` | agenda diária | `sortear_objetos → verificar_hash → registrar` |
 
 `fechar_lote` roda sempre, mesmo quando uma tarefa anterior falha, para que `ctrl.lote` registre o que

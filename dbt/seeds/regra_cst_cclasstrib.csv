@@ -1,0 +1,3 @@
+cst,cclasstrib,descricao,inicio_vigencia,fim_vigencia,situacao,fonte
+000,000001,tributação integral de IBS e CBS,2026-01-01,,a validar,hipótese de trabalho (gerador/referencias.py)
+410,410999,operação sem incidência: transferência e remessa para operador logístico,2026-01-01,,a validar,hipótese de trabalho (gerador/referencias.py)

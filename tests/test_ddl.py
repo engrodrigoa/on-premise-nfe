@@ -40,6 +40,28 @@ def test_entrega_completa_compara_declarado_com_encontrado(conexao_db):
         assert cur.fetchone()[0] is True
 
 
+def test_silver_fechada_soma_os_tres_destinos(conexao_db):
+    """D020: bronze = válidos + quarentena + reenvios descartados."""
+    with conexao_db.cursor() as cur:
+        lote = _lote(cur)
+        cur.execute("""UPDATE ctrl.lote SET qtd_bronze = 10, qtd_validos = 7, qtd_quarentena = 2, qtd_reenvios = 0
+                        WHERE lote_id = %s""", (lote,))
+        cur.execute("SELECT silver_fechada FROM ctrl.v_lote WHERE lote_id = %s", (lote,))
+        assert cur.fetchone()[0] is False
+        cur.execute("UPDATE ctrl.lote SET qtd_reenvios = 1 WHERE lote_id = %s", (lote,))
+        cur.execute("SELECT silver_fechada FROM ctrl.v_lote WHERE lote_id = %s", (lote,))
+        assert cur.fetchone()[0] is True
+
+
+def test_falha_da_silver_nao_muda_o_status_da_entrega(conexao_db):
+    """D019: erro_transformacao convive com o status CARREGADO ou INCOMPLETO."""
+    with conexao_db.cursor() as cur:
+        lote = _lote(cur)
+        cur.execute("""UPDATE ctrl.lote SET status = 'INCOMPLETO', erro_transformacao = 'dbt falhou'
+                        WHERE lote_id = %s RETURNING status, transformado_em""", (lote,))
+        assert cur.fetchone() == ("INCOMPLETO", None)
+
+
 def test_reconciliacao_calcula_diferenca_e_confere(conexao_db):
     with conexao_db.cursor() as cur:
         lote = _lote(cur)
