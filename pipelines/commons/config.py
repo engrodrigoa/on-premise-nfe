@@ -48,6 +48,16 @@ class Config:
         """Segunda entrega de um lote já carregado: fica separada, para análise."""
         return f"{self.dir_origem}/rejeitados"
 
+    @property
+    def dir_gabarito(self) -> str:
+        """Anomalias injetadas pelo gerador. Só a conferência lê esta pasta; o pipeline nunca (D014)."""
+        return f"{self.dir_origem}/gabarito"
+
+    @property
+    def arquivo_estado_gerador(self) -> str:
+        """Estado do ERP simulado: a conferência usa os arquivos ainda pendentes de entrega."""
+        return f"{self.dir_origem}/gerador_estado.json"
+
 
 def carregar() -> Config:
     lock_mode = _env("CUSTODIA_LOCK_MODE", "GOVERNANCE").upper()
