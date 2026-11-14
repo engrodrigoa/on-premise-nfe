@@ -1,4 +1,4 @@
-# Handoff — estado em 13/11/2026 (fim da sessão do marco 4)
+# Handoff — estado em 13/11/2026 (marco 4 concluído)
 
 Leia primeiro o `CLAUDE.md` (regras), depois este arquivo. O porquê das escolhas está em `docs/decisoes.md` (D001–D025).
 
@@ -7,8 +7,9 @@ Leia primeiro o `CLAUDE.md` (regras), depois este arquivo. O porquê das escolha
 | Marco | Status | PR |
 |---|---|---|
 | 0 a 3a | concluídos | #1 a #5 |
-| **4. Silver (dbt)** | **implementado; falta a validação no WSL** | branch `feat/silver` |
-| 5. Gold + `ctrl.reconciliacao` · 6. Página de negócio · 7. Operação | a fazer | — |
+| 4. Silver (dbt) | concluído (validado no WSL) | #7 |
+| **5. Gold + `ctrl.reconciliacao`** | **próximo** | — |
+| 6. Página de negócio · 7. Operação | a fazer | — |
 
 A branch remota `feat/painel-saude-carga` já não existia. PRs: um por vez, direto contra a `main`.
 
@@ -66,17 +67,10 @@ com as constraints oficiais.
 - Uma execução da `dag_nfe_saida` fica sempre esperando no sensor (até 55 min): é o encadeamento com
   `max_active_runs=1`, e é ela que pega o próximo lote em cerca de 1 minuto (D024). Não é execução presa.
 
-## Falta (validação do dono, no WSL)
+## Pendente do marco 4
 
-1. `git switch feat/silver`, depois `docker compose restart airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver grafana` (bind mounts).
-2. `make db-bootstrap` (colunas novas em `ctrl.lote` e a view).
-3. `git pull` na `feat/silver`, `make silver && make teste-silver` (deve passar com 1 salto explicado por arquivo não entregue); depois `make gerar-sujo DIAS=5 && make carregar && make teste-silver`.
-4. Depois do `git pull`: "Silver em dia?" em `SIM`; capturas em `docs/img/` (pontos marcados em comentário no README).
-5. Números no PR; marco 4 → "concluído" no roadmap.
-
-Os lotes antigos (carregados antes da silver) aparecem como "Falhas de processo" no painel de saúde até o
-passo 3 (D019). Se a suíte com banco já rodou contra o banco do stack, há lotes com ano 2100-9999: viram reenvios
-na silver e a conferência os ignora (pendência no roadmap).
+- Capturas em `docs/img/` (Airflow, "Saúde da carga", "Qualidade do conteúdo" já com "Silver em dia?" em `SIM`);
+  os pontos estão marcados em comentário no README.
 
 ## Marco 5 — o que fazer
 

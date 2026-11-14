@@ -6,7 +6,7 @@ fiscal e o financeiro consultam, já com os grupos da reforma tributária (IBS, 
 O projeto é escrito como o trabalho de um **consultor de engenharia de dados** dentro do cliente: primeiro o
 escopo, depois o desenho das quatro linhas, depois a entrega por marcos.
 
-> **Status: marcos 1 a 3a concluídos; marco 4 (silver) em validação.** O ambiente sobe com `make up`, o ERP
+> **Status: marcos 1 a 4 concluídos.** O ambiente sobe com `make up`, o ERP
 > simulado entrega lotes diários na pasta de rede e a `dag_nfe_saida` leva cada lote até a silver: custódia,
 > bronze, quarentena e avisos fiscais, com painéis de saúde da carga e de qualidade do conteúdo. Gold e página
 > de negócio ainda não existem. O que existe e o que falta está em [docs/roadmap.md](docs/roadmap.md).
