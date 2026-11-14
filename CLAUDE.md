@@ -1,6 +1,6 @@
 # CLAUDE.md — on-premise-nfe
 
-Contexto para desenvolvimento assistido por IA. Leia antes de alterar qualquer coisa. O que o projeto é
+Contexto para desenvolvimento assistido por IA. Leia antes de alterar qualquer coisa. Estado atual e próximos passos: `docs/handoff.md`. O que o projeto é
 está no `README.md`; o porquê de cada escolha está em `docs/decisoes.md`.
 
 ## O que é
