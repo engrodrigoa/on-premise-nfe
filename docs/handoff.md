@@ -56,12 +56,22 @@ com as constraints oficiais.
      buraco é `FALTANTE` em `ctrl.lote_divergencia`, e o detalhe do aviso cita o lote e os números. Reproduzido
      aqui com a mesma sequência de comandos: mesmos lotes byte a byte, mesma chave, e 41/41 depois da correção.
 
+## Validação no WSL (13/11, segunda rodada)
+
+- 14 lotes: 41/41, 0 sobrando, 1 salto explicado por arquivo não entregue, 2/2 cancelamentos tardios.
+- `make gerar-sujo DIAS=5 && make carregar && make teste-silver`: o `carregar` esperou lote a lote; 19 lotes,
+  50/50, 0 sobrando, 2/2. Painéis com números iguais aos da silver (8 em quarentena, 30 avisos).
+- Achado 3, corrigido: "Silver em dia?" mostrava "sem dados". Stat do Grafana com `fields` vazio só lê coluna
+  numérica; o veredito em texto precisa apontar o campo (`/^em_dia$/`). Teste novo cobre os dois painéis.
+- Uma execução da `dag_nfe_saida` fica sempre esperando no sensor (até 55 min): é o encadeamento com
+  `max_active_runs=1`, e é ela que pega o próximo lote em cerca de 1 minuto (D024). Não é execução presa.
+
 ## Falta (validação do dono, no WSL)
 
 1. `git switch feat/silver`, depois `docker compose restart airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver grafana` (bind mounts).
 2. `make db-bootstrap` (colunas novas em `ctrl.lote` e a view).
 3. `git pull` na `feat/silver`, `make silver && make teste-silver` (deve passar com 1 salto explicado por arquivo não entregue); depois `make gerar-sujo DIAS=5 && make carregar && make teste-silver`.
-4. Conferir as duas páginas do Grafana e o grafo da DAG; capturas em `docs/img/` (pontos marcados em comentário no README).
+4. Depois do `git pull`: "Silver em dia?" em `SIM`; capturas em `docs/img/` (pontos marcados em comentário no README).
 5. Números no PR; marco 4 → "concluído" no roadmap.
 
 Os lotes antigos (carregados antes da silver) aparecem como "Falhas de processo" no painel de saúde até o

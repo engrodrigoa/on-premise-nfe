@@ -320,7 +320,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/^em_dia$/",
           "values": false
         },
         "colorMode": "background",

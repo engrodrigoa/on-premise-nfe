@@ -34,6 +34,23 @@ def test_estrutura(painel):
         "Arquivos em quarentena", "Avisos fiscais", "Avisos por 100 notas", "Silver em dia?"]
 
 
+@pytest.mark.parametrize("arquivo", ["saude_carga.json", "qualidade_conteudo.json"])
+def test_stat_de_texto_aponta_o_campo(arquivo):
+    """O stat do Grafana só reduz colunas numéricas quando `fields` fica vazio: um veredito em texto (SIM, OK,
+    NUNCA VERIFICADA) some e aparece "sem dados". Pego na validação do marco 4 no "Silver em dia?"."""
+    dados = json.loads((PAINEL.parent / arquivo).read_text(encoding="utf-8"))
+    for p in dados["panels"]:
+        if p["type"] != "stat":
+            continue
+        textos = [k for m in p["fieldConfig"]["defaults"].get("mappings", []) if m["type"] == "value"
+                  for k in m["options"] if not k.replace(".", "").isdigit()]
+        if textos:
+            campo = p["options"]["reduceOptions"]["fields"]
+            assert campo.startswith("/^") and campo.endswith("$/"), f"{arquivo}: {p['title']} sem o campo de texto"
+            alias = campo[2:-2]
+            assert re.search(rf"\bAS {alias}\b", p["targets"][0]["rawSql"]), f"{p['title']}: alias {alias} ausente"
+
+
 def test_leiaute_sem_sobreposicao(painel):
     ocupado = set()
     for p in painel["panels"]:
