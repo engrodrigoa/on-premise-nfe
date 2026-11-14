@@ -11,4 +11,25 @@ test-paths: ["tests"]
 # target e logs ficam fora do código: DBT_TARGET_PATH e DBT_LOG_PATH (docker-compose.yml)
 clean-targets: ["target", "dbt_packages"]
 
-# Os modelos entram nos marcos 4 (silver) e 5 (gold).
+# Silver (marco 4) recriada inteira a partir da bronze a cada carga (D021). Gold entra no marco 5.
+models:
+  nfe_onprem:
+    silver:
+      +schema: silver
+      +materialized: table
+
+# Seeds: regras fiscais com vigência, todas "a validar" (D008), cadastro do grupo e catálogo das regras de
+# qualidade. Ficam na silver porque a silver é quem as aplica; o painel não lê seeds.
+seeds:
+  nfe_onprem:
+    +schema: silver
+    cad_estabelecimento_grupo:
+      +column_types: {cnpj: text, empresa: text, uf: text, serie: int, inicio_vigencia: date, fim_vigencia: date, observacao: text}
+    regra_cst_cclasstrib:
+      +column_types: {cst: text, cclasstrib: text, descricao: text, inicio_vigencia: date, fim_vigencia: date, situacao: text, fonte: text}
+    regra_aliquota_ibscbs:
+      +column_types: {tributo: text, aliquota: "numeric(7,4)", inicio_vigencia: date, fim_vigencia: date, situacao: text, fonte: text}
+    regra_prazo_evento:
+      +column_types: {tp_evento: text, descricao: text, prazo_horas: int, inicio_vigencia: date, fim_vigencia: date, situacao: text, fonte: text}
+    cat_regra_qualidade:
+      +column_types: {regra: text, severidade: text, linha: text, descricao: text, quem_age: text}

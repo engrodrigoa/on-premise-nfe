@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: XML bruto, 1 linha por arquivo recebido (DDL em infra/postgres/init/sql/04_bronze.sql)
+    tables:
+      - name: documento_xml
+        columns:
+          - name: bronze_id
+            data_tests: [unique, not_null]
+
+  - name: ctrl
+    description: controle de carga (DDL em infra/postgres/init/sql/02_ctrl_lote.sql)
+    tables:
+      - name: lote
