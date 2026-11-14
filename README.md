@@ -6,10 +6,10 @@ fiscal e o financeiro consultam, já com os grupos da reforma tributária (IBS, 
 O projeto é escrito como o trabalho de um **consultor de engenharia de dados** dentro do cliente: primeiro o
 escopo, depois o desenho das quatro linhas, depois a entrega por marcos.
 
-> **Status: marcos 1 a 3a concluídos; marco 4 (silver) em andamento.** O ambiente sobe com `make up`, o ERP
-> simulado entrega lotes diários na pasta de rede e a `dag_nfe_saida` leva cada lote até a bronze, com custódia
-> e painel de saúde da carga. Gold e página de negócio ainda não existem. O que existe e o que falta está em
-> [docs/roadmap.md](docs/roadmap.md).
+> **Status: marcos 1 a 3a concluídos; marco 4 (silver) em validação.** O ambiente sobe com `make up`, o ERP
+> simulado entrega lotes diários na pasta de rede e a `dag_nfe_saida` leva cada lote até a silver: custódia,
+> bronze, quarentena e avisos fiscais, com painéis de saúde da carga e de qualidade do conteúdo. Gold e página
+> de negócio ainda não existem. O que existe e o que falta está em [docs/roadmap.md](docs/roadmap.md).
 
 Dados **100% sintéticos**. O cliente ("Grupo Xis") é fictício e nenhum documento, CNPJ ou CPF real entra neste
 repositório.
@@ -84,6 +84,46 @@ Base no [datalabs](https://github.com/engrodrigoa/datalabs), num `docker compose
 Pré-requisitos: Docker (no Windows, Docker Desktop com WSL2 e o repositório clonado **dentro** do WSL) e `make`.
 Este stack usa as portas padrão; pare o datalabs antes (`make down` lá).
 
+### Roteiro em um comando
+
+```bash
+git clone https://github.com/engrodrigoa/on-premise-nfe && cd on-premise-nfe
+make demo            # sobe o stack, gera 7 dias com anomalias, carrega pela DAG até a silver e confere
+```
+
+O que acontece, e o que você deve ver em cada etapa:
+
+| Etapa | Onde olhar | O que aparece |
+|---|---|---|
+| 1. sobe o stack | terminal | `.env` criado com senhas aleatórias; espera o Airflow ficar saudável (o primeiro build leva alguns minutos) |
+| 2. o ERP entrega 7 lotes | terminal | uma linha por lote: arquivos, NF-e, eventos, soma de `vNF` e anomalias injetadas |
+| 3. a DAG carrega lote a lote | Airflow → `dag_nfe_saida` | uma execução por lote, encadeadas: custódia → bronze → `transformar_silver` → `registrar_silver` |
+| 4. espera a carga terminar | terminal | `inbox 0 · processando 0 · em carga 0 · aguardando silver 0 · na silver 7/7` e `PRONTO` |
+| 5. saúde por lote | terminal (`make lotes`) | declarado × recebido × custodiado × bronze × válidos × quarentena × reenvios, `fecha = t` |
+| 6. critério de pronto do marco 4 | terminal (`make teste-silver`) | os quatro `PASSOU` e a tabela anomalia × injetadas × encontradas |
+| 7. painéis | Grafana → pasta NF-e | "Saúde da carga" verde; "Qualidade do conteúdo" com a quarentena por motivo e os avisos por regra |
+
+Saída do passo 6 num clone novo. O gerador é determinístico pela seed (42), então a primeira execução de
+`make demo` reproduz estes números (484 arquivos na bronze = 474 válidos + 2 em quarentena + 8 reenvios
+descartados); com mais dias gerados eles mudam, e os quatro `PASSOU` não:
+
+```
+Marco 4 · conferência da silver (7 lotes, 7 com gabarito)
+
+  PASSOU       1. fechamento: bronze = válidos + quarentena + reenvios  7/7 lotes
+  PASSOU       2. gabarito: anomalia injetada encontrada onde devia     29/29
+  PASSOU          gabarito: nada acusado sem ter sido injetado          0 sobrando
+  PASSOU       3. cancelamento que chega depois muda a situação         1/1 notas canceladas
+```
+
+`INCONCLUSIVO` no item 3 quer dizer que nenhum cancelamento chegou num lote posterior ao da nota: gere mais dias
+(`make gerar-sujo DIAS=5 && make carregar`) e rode `make teste-silver` de novo.
+
+<!-- capturas da validação do marco 4: docs/img/airflow_dag_nfe_saida.png, docs/img/grafana_saude_carga.png,
+     docs/img/grafana_qualidade_conteudo.png -->
+
+### Passo a passo
+
 ```bash
 make up              # cria o .env com senhas aleatórias, faz o build e sobe tudo
 make ps              # todos os serviços devem ficar "healthy" (o primeiro build leva alguns minutos)
@@ -100,18 +140,20 @@ make gerar-sujo DIAS=5     # os próximos 5 dias, com anomalias e gabarito
 make gerar ARGS="--incompleto 40"   # um lote entregue com 40 arquivos a menos
 ```
 
-Carga até a bronze (`dag_nfe_saida`, um lote por execução, do mais antigo para o mais novo):
+Carga até a silver (`dag_nfe_saida`, de hora em hora, um lote por execução, do mais antigo para o mais novo):
 
 ```bash
 make carregar       # liga a DAG e dispara; ela encadeia sozinha até esvaziar a inbox
-make lotes          # saúde da carga por lote (ctrl.v_lote): declarado x recebido x custodiado x bronze
+make lotes          # por lote (ctrl.v_lote): declarado x recebido x custodiado x bronze x silver
 make teste-bronze   # reconstrói a bronze a partir do raw, numa tabela temporária, e compara
+make silver         # roda só a silver (dbt) e o registro em ctrl, sem a DAG
+make teste-silver   # critério de pronto do marco 4, contra o gabarito do gerador
 ```
 
 | Serviço | Endereço |
 |---|---|
 | Airflow | http://localhost:8080 |
-| Grafana | http://localhost:3000 (pasta NF-e → "Saúde da carga") |
+| Grafana | http://localhost:3000 (pasta NF-e → "Saúde da carga" e "Qualidade do conteúdo") |
 | Console do object store | http://localhost:9001 (porta configurável: `MINIO_CONSOLE_PORT` no `.env`) |
 | Postgres | `localhost:5432` |
 
