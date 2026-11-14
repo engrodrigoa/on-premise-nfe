@@ -82,10 +82,28 @@ numero_anterior as (
     from numero_recebido
 ),
 
+-- número que a origem declarou no romaneio e não entregou (linha 2): o buraco é real, e o aviso diz quem age
+faltante as (
+    select substr(f.chave, 7, 14) as emit_cnpj, substr(f.chave, 23, 3)::int as serie,
+           substr(f.chave, 26, 9)::bigint as nnf, l.nome_lote
+    from (select substring(arquivo from '^([0-9A-Z]{44})-') as chave, lote_id
+          from {{ source('ctrl', 'lote_divergencia') }}
+          where tipo = 'FALTANTE' and arquivo !~ 'procEventoNFe') as f
+    join {{ source('ctrl', 'lote') }} as l using (lote_id)
+    where {{ nfe_chave_valida('f.chave') }}
+),
+
 salto as (
     select n.chave, 'numeracao_com_salto',
            format('série %s: depois do nº %s veio o nº %s (%s número(s) sem nota)',
                   a.serie, a.nnf_anterior, a.nnf, a.nnf - a.nnf_anterior - 1)
+           || coalesce((select format('; declarado(s) no romaneio e não entregue(s) em %s: nº %s',
+                                      string_agg(distinct f.nome_lote, ', '),
+                                      string_agg(f.nnf::text, ', ' order by f.nnf))
+                        from faltante as f
+                        where f.emit_cnpj = a.emit_cnpj and f.serie = a.serie
+                          and f.nnf > a.nnf_anterior and f.nnf < a.nnf
+                        having count(*) > 0), '')
     from numero_anterior as a
     join nota as n on n.emit_cnpj = a.emit_cnpj and n.serie = a.serie and n.nnf = a.nnf
     where a.nnf - a.nnf_anterior > 1

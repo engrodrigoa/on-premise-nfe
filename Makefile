@@ -9,6 +9,7 @@ PG := $(COMPOSE) exec -T postgres
 DIAS ?= 1
 ARGS ?=
 DIAS_DEMO ?= 7
+ESPERAR ?= 1
 DBT := "$$DBT_BIN" build --select +path:models/silver --project-dir "$$DBT_PROJECT_DIR" --profiles-dir "$$DBT_PROFILES_DIR"
 
 help: ## lista os alvos
@@ -67,9 +68,10 @@ gerar: ## ERP simulado: entrega os próximos DIAS lotes (DIAS=1). Extra: ARGS="-
 gerar-sujo: ## idem, com anomalias nas taxas padrão e gabarito em datasource/nfe/gabarito
 	$(AF) python -m gerador.gen_nfe --dias $(DIAS) --sujo $(ARGS)
 
-carregar: ## marco 3: liga a dag_nfe_saida e dispara; ela encadeia até esvaziar a inbox
+carregar: ## liga a dag_nfe_saida, dispara e ESPERA a carga chegar à silver (ESPERAR=0: só dispara)
 	$(AF) airflow dags unpause dag_nfe_saida
-	$(AF) airflow dags trigger dag_nfe_saida
+	$(AF) airflow dags trigger dag_nfe_saida -o plain >/dev/null && echo "dag_nfe_saida disparada"
+	@[ "$(ESPERAR)" = 0 ] || $(AF) python -m pipelines.carga.aguardar --timeout 1800
 
 carregar-um: ## carrega só o lote mais antigo, no terminal, sem encadear (depuração)
 	$(AF) airflow dags test dag_nfe_saida -c '{"encadear": false}'
@@ -98,7 +100,6 @@ demo: ## roteiro completo para quem clonou: sobe, gera DIAS_DEMO dias sujos, car
 	@$(MAKE) --no-print-directory aguardar-airflow
 	@$(MAKE) --no-print-directory gerar-sujo DIAS=$(DIAS_DEMO)
 	@$(MAKE) --no-print-directory carregar
-	$(AF) python -m pipelines.carga.aguardar --timeout 1800
 	@$(MAKE) --no-print-directory lotes
 	@$(MAKE) --no-print-directory teste-silver
 	@echo "Painéis: Grafana > pasta NF-e > 'Saúde da carga' e 'Qualidade do conteúdo'"

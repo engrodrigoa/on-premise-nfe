@@ -143,7 +143,7 @@ make gerar ARGS="--incompleto 40"   # um lote entregue com 40 arquivos a menos
 Carga até a silver (`dag_nfe_saida`, de hora em hora, um lote por execução, do mais antigo para o mais novo):
 
 ```bash
-make carregar       # liga a DAG e dispara; ela encadeia sozinha até esvaziar a inbox
+make carregar       # liga a DAG, dispara e espera a carga chegar à silver (ESPERAR=0 só dispara)
 make lotes          # por lote (ctrl.v_lote): declarado x recebido x custodiado x bronze x silver
 make teste-bronze   # reconstrói a bronze a partir do raw, numa tabela temporária, e compara
 make silver         # roda só a silver (dbt) e o registro em ctrl, sem a DAG

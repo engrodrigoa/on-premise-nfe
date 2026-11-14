@@ -13,3 +13,5 @@ sources:
     description: controle de carga (DDL em infra/postgres/init/sql/02_ctrl_lote.sql)
     tables:
       - name: lote
+      - name: lote_divergencia
+        description: arquivo do lote que não confere com o romaneio (FALTANTE, NAO_DECLARADO, HASH_DIVERGENTE)

@@ -27,15 +27,35 @@ def test_gabarito_so_dos_lotes_carregados(tmp_path):
     assert [g["lote"] for g in linhas] == ["lote_2026-01-02"]
 
 
+def test_faltantes_viram_numeros_da_serie():
+    arquivos = [f"{CHAVE}-procNFe.xml", f"{CHAVE}-110111-01-procEventoNFe.xml", "lixo.xml"]
+    assert c.numeros_faltantes(arquivos) == {("91170343000150", 1, 48324)}
+
+
+def test_salto_explicado_por_arquivo_faltante_ou_pendente():
+    """O caso da validação no WSL: lote entregue com --incompleto 5 tirou os nº 48320..48324 da série; quando o
+    nº 48325 chegou no lote seguinte, o buraco apareceu. O aviso está certo; a conferência aceita o motivo."""
+    serie = [48318, 48319, 48325]
+    cnpj = "91170343000150"
+    faltantes = {(cnpj, 1, n) for n in range(48320, 48325)}
+    assert c.explicar_salto(cnpj, 1, 48325, serie, set(), faltantes) == "arquivo declarado e não entregue"
+    assert c.explicar_salto(cnpj, 1, 48325, serie, {(cnpj, 1, 48320)}, faltantes - {(cnpj, 1, 48320)}) \
+        == "nota ainda não entregue"
+    assert c.explicar_salto(cnpj, 1, 48325, serie, set(), faltantes - {(cnpj, 1, 48321)}) is None   # buraco sem dono
+    assert c.explicar_salto(cnpj, 1, 48318, serie, set(), faltantes) is None                        # primeiro da série
+
+
 def _resultado(**extra):
     base = {"fechamento": [{"silver_fechada": True}], "esperado": {"xml_corrompido": 1},
-            "achado": {"xml_corrompido": 1}, "faltando": [], "sobrando": [], "explicados": 0,
+            "achado": {"xml_corrompido": 1}, "faltando": [], "sobrando": [], "explicados": {},
             "tardios": 1, "tardios_cancelados": 1, "lotes_gabarito": 1, "lotes": 1}
     return {**base, **extra}
 
 
 def test_codigo_de_saida(capsys):
     assert c.imprimir(_resultado()) == 0
+    assert c.imprimir(_resultado(explicados={"arquivo declarado e não entregue": 1})) == 0
+    assert "1 salto(s) por arquivo declarado e não entregue" in capsys.readouterr().out
     assert c.imprimir(_resultado(sobrando=["aviso x"])) == 1                      # falso positivo reprova
     assert c.imprimir(_resultado(achado={"xml_corrompido": 0}, faltando=["x"])) == 1
     assert c.imprimir(_resultado(fechamento=[{"silver_fechada": False}])) == 1

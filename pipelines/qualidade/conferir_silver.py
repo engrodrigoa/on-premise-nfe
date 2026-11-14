@@ -5,15 +5,21 @@ do ERP simulado (D014). Confere três coisas e imprime PASSOU/FALHOU em cada uma
 
   1. fechamento        bronze = válidos + quarentena + reenvios descartados, em todo lote (D020)
   2. gabarito          toda anomalia injetada aparece onde deve (recall) e nada aparece sem ter sido injetado
-                       (precisão). Exceção explicada: salto de numeração causado por nota que o ERP ainda não
-                       entregou (está nos pendentes do gerador). Ela some quando a nota chegar.
+                       (precisão). Salto de numeração não injetado é aceito quando o número que falta é de uma
+                       nota que a origem ainda vai entregar (pendentes do gerador: some quando ela chegar) ou
+                       de um arquivo declarado e não entregue (FALTANTE em ctrl.lote_divergencia): o buraco é
+                       real e o aviso está certo, mas o gabarito o registra só como arquivo_nao_entregue.
                        Só lotes com gabarito entram: os da suíte de testes (tests/test_carga.py grava lotes
                        com ano 2100-9999 e sem gabarito na pasta) são contados e ignorados.
   3. cancelamento      todo cancelamento que chegou num lote depois da nota deixou a nota cancelada
 
     python -m pipelines.qualidade.conferir_silver            (ou: make teste-silver)
 
-Código de saída: 0 tudo passou; 1 algo falhou; 2 inconclusivo (o período não tem o caso a provar).
+Com a carga em andamento (lote na inbox, em processando/ ou fora da silver) a conferência não roda: comparar
+uma silver pela metade com o gabarito inteiro só produz falso alarme.
+
+Código de saída: 0 tudo passou; 1 algo falhou; 2 inconclusivo (carga em andamento ou o período não tem o caso
+a provar).
 """
 from __future__ import annotations
 
@@ -23,6 +29,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from pipelines.carga.aguardar import situacao as situacao_da_carga
 from pipelines.commons.config import Config, carregar
 from pipelines.commons.db import conectar
 
@@ -49,6 +56,13 @@ def ler_gabarito(pasta: Path, lotes: set[str]) -> list[dict]:
     return linhas
 
 
+def numero_da_chave(chave: str) -> tuple[str, int, int] | None:
+    """(cnpj, série, nNF) a partir da chave de acesso; None se não for uma chave de 44 posições."""
+    if len(chave) != 44 or not chave[22:34].isdigit():
+        return None
+    return chave[6:20], int(chave[22:25]), int(chave[25:34])
+
+
 def numeros_pendentes(caminho_estado: Path) -> set[tuple[str, int, int]]:
     """(cnpj, série, nNF) das NF-e que o ERP ainda vai entregar: explicam um salto temporário."""
     if not caminho_estado.exists():
@@ -56,10 +70,37 @@ def numeros_pendentes(caminho_estado: Path) -> set[tuple[str, int, int]]:
     estado = json.loads(caminho_estado.read_text(encoding="utf-8"))
     saida = set()
     for p in estado.get("pendentes", []):
-        chave = p.get("chave") or ""
-        if p.get("tipo") == "nfe" and len(chave) == 44:
-            saida.add((chave[6:20], int(chave[22:25]), int(chave[25:34])))
+        numero = numero_da_chave(p.get("chave") or "") if p.get("tipo") == "nfe" else None
+        if numero:
+            saida.add(numero)
     return saida
+
+
+def numeros_faltantes(arquivos: list[str]) -> set[tuple[str, int, int]]:
+    """(cnpj, série, nNF) das NF-e declaradas no romaneio e não entregues (nome <chave>-procNFe*.xml)."""
+    saida = set()
+    for arquivo in arquivos:
+        if "procEventoNFe" in arquivo:
+            continue
+        numero = numero_da_chave(arquivo.split("-", 1)[0])
+        if numero:
+            saida.add(numero)
+    return saida
+
+
+def explicar_salto(cnpj: str, serie: int, nnf: int, recebidos: list[int],
+                   pendentes: set, faltantes: set) -> str | None:
+    """Por que falta número antes de nnf? Devolve o motivo aceito, ou None se o buraco não tem explicação."""
+    anteriores = [n for n in recebidos if n < nnf]
+    buraco = range(anteriores[-1] + 1, nnf) if anteriores else range(0)
+    if not buraco:
+        return None
+    numeros = {(cnpj, serie, n) for n in buraco}
+    if numeros <= faltantes:
+        return "arquivo declarado e não entregue"
+    if numeros <= pendentes | faltantes:
+        return "nota ainda não entregue"
+    return None
 
 
 def _consulta(cur, sql: str, params=None) -> list[dict]:
@@ -87,6 +128,8 @@ def conferir(cfg: Config) -> dict:
         situacao = _consulta(cur, """
             SELECT chave, situacao, chegada_cancelamento FROM silver.nfe_situacao
              WHERE chegada_cancelamento IS NOT NULL""")
+        cur.execute("SELECT arquivo FROM ctrl.lote_divergencia WHERE tipo = 'FALTANTE'")
+        faltantes = numeros_faltantes([linha[0] for linha in cur.fetchall()])
 
     lotes = {f["nome_lote"] for f in fechamento}
     gabarito = ler_gabarito(Path(cfg.dir_gabarito), lotes)
@@ -132,7 +175,7 @@ def conferir(cfg: Config) -> dict:
     for numeros in por_serie.values():
         numeros.sort()
 
-    sobrando, explicados = [], 0
+    sobrando, explicados = [], Counter()
     for d in documentos:
         if d["nome_lote"] not in com_gabarito:
             continue
@@ -145,11 +188,10 @@ def conferir(cfg: Config) -> dict:
         if a["nome_lote"] not in com_gabarito or (a["chave"], a["regra"]) in esperados_aviso:
             continue
         if a["regra"] == "numeracao_com_salto":
-            serie = por_serie.get((a["emit_cnpj"], a["serie"]), [])
-            anteriores = [n for n in serie if n < a["nnf"]]
-            buraco = range(anteriores[-1] + 1, a["nnf"]) if anteriores else range(0)
-            if buraco and all((a["emit_cnpj"], a["serie"], n) in pendentes for n in buraco):
-                explicados += 1
+            motivo = explicar_salto(a["emit_cnpj"], a["serie"], a["nnf"],
+                                    por_serie.get((a["emit_cnpj"], a["serie"]), []), pendentes, faltantes)
+            if motivo:
+                explicados[motivo] += 1
                 continue
         sobrando.append(f"aviso {a['regra']}: {a['chave']}")
 
@@ -167,6 +209,7 @@ def imprimir(r: dict) -> int:
     abertos = [f for f in r["fechamento"] if not f["silver_fechada"]]
     total = sum(r["esperado"].values())
     acertos = sum(r["achado"].values())
+    explicacao = "".join(f", {n} salto(s) por {motivo}" for motivo, n in sorted(r["explicados"].items()))
     checagens = [
         ("PASSOU" if not abertos and r["fechamento"] else "FALHOU",
          "1. fechamento: bronze = válidos + quarentena + reenvios",
@@ -175,8 +218,7 @@ def imprimir(r: dict) -> int:
          "2. gabarito: anomalia injetada encontrada onde devia", f"{acertos}/{total}"),
         ("PASSOU" if not r["sobrando"] else "FALHOU",
          "   gabarito: nada acusado sem ter sido injetado",
-         f"{len(r['sobrando'])} sobrando" + (f", {r['explicados']} salto(s) por nota ainda não entregue"
-                                             if r["explicados"] else "")),
+         f"{len(r['sobrando'])} sobrando{explicacao}"),
     ]
     if r["tardios"] == 0:
         checagens.append(("INCONCLUSIVO", "3. cancelamento que chega depois muda a situação",
@@ -209,8 +251,22 @@ def imprimir(r: dict) -> int:
     return 2 if "INCONCLUSIVO" in estados else 0
 
 
+def carga_em_andamento(cfg: Config) -> str | None:
+    s = situacao_da_carga(cfg)
+    if s["na_inbox"] or s["processando"] or s["em_carga"] or s["sem_silver"]:
+        return (f"inbox {s['na_inbox']} · processando {s['processando']} · em carga {s['em_carga']} · "
+                f"aguardando silver {s['sem_silver']}")
+    return None
+
+
 def main() -> int:
-    return imprimir(conferir(carregar()))
+    cfg = carregar()
+    andamento = carga_em_andamento(cfg)
+    if andamento:
+        print(f"\n  INCONCLUSIVO  carga em andamento ({andamento}).\n"
+              "                Espere terminar (`make carregar` já espera) e rode de novo.\n")
+        return 2
+    return imprimir(conferir(cfg))
 
 
 if __name__ == "__main__":

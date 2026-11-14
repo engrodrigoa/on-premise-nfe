@@ -42,11 +42,25 @@ com as constraints oficiais.
   `erro_transformacao`; o registro recusa silver velha; o sucesso seguinte limpa.
 - `ruff`, `pytest` com banco (todos) e `tests/test_dag_integrity.py` no Airflow 3.4.0 (6/6).
 
+## Validação no WSL (13/11, primeira rodada)
+
+- `make silver && make teste-silver` nos 4 lotes antigos: 39/39 no dbt; 200 = 197 + 1 + 2; gabarito 12/12;
+  cancelamento tardio `INCONCLUSIVO` (nenhum caso ainda).
+- A DAG rodou de ponta a ponta no Airflow real (`transformar_silver` ~8 s, run de ~20 s).
+- Dois achados, já corrigidos na branch:
+  1. `make carregar` só disparava a DAG; o `teste-silver` encadeado olhava a silver antiga. Agora `carregar`
+     espera a carga chegar à silver, e a conferência devolve `INCONCLUSIVO` se houver carga em andamento.
+  2. `FALHOU` com 1 `numeracao_com_salto` sem gabarito: o lote 05/01 (`--incompleto 5`) não entregou os nº
+     48268 a 48272 da série GO-importadora; quando o 48273 chegou, o buraco apareceu. O aviso está certo (falta
+     nota sob custódia); o gabarito só registra `arquivo_nao_entregue`. A conferência agora aceita salto cujo
+     buraco é `FALTANTE` em `ctrl.lote_divergencia`, e o detalhe do aviso cita o lote e os números. Reproduzido
+     aqui com a mesma sequência de comandos: mesmos lotes byte a byte, mesma chave, e 41/41 depois da correção.
+
 ## Falta (validação do dono, no WSL)
 
 1. `git switch feat/silver`, depois `docker compose restart airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver grafana` (bind mounts).
 2. `make db-bootstrap` (colunas novas em `ctrl.lote` e a view).
-3. `make silver && make teste-silver` sobre os lotes que já existem; depois `make gerar-sujo DIAS=5 && make carregar`, `make lotes`, `make teste-silver`.
+3. `git pull` na `feat/silver`, `make silver && make teste-silver` (deve passar com 1 salto explicado por arquivo não entregue); depois `make gerar-sujo DIAS=5 && make carregar && make teste-silver`.
 4. Conferir as duas páginas do Grafana e o grafo da DAG; capturas em `docs/img/` (pontos marcados em comentário no README).
 5. Números no PR; marco 4 → "concluído" no roadmap.
 
