@@ -6,9 +6,10 @@ fiscal e o financeiro consultam, já com os grupos da reforma tributária (IBS, 
 O projeto é escrito como o trabalho de um **consultor de engenharia de dados** dentro do cliente: primeiro o
 escopo, depois o desenho das quatro linhas, depois a entrega por marcos.
 
-> **Status: marcos 1 e 2 (fundação e origem).** O ambiente sobe com `make up` e o ERP simulado entrega lotes
-> diários na pasta de rede. O pipeline (custódia, bronze, silver, gold e painel) ainda não foi implementado.
-> O que existe e o que falta está em [docs/roadmap.md](docs/roadmap.md).
+> **Status: marcos 1 a 3a concluídos; marco 4 (silver) em andamento.** O ambiente sobe com `make up`, o ERP
+> simulado entrega lotes diários na pasta de rede e a `dag_nfe_saida` leva cada lote até a bronze, com custódia
+> e painel de saúde da carga. Gold e página de negócio ainda não existem. O que existe e o que falta está em
+> [docs/roadmap.md](docs/roadmap.md).
 
 Dados **100% sintéticos**. O cliente ("Grupo Xis") é fictício e nenhum documento, CNPJ ou CPF real entra neste
 repositório.
