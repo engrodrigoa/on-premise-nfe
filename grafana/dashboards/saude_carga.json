@@ -15,7 +15,7 @@
     "to": "now"
   },
   "schemaVersion": 41,
-  "version": 1,
+  "version": 2,
   "links": [
     {
       "title": "Airflow",
@@ -111,7 +111,7 @@
       "id": 2,
       "type": "stat",
       "title": "Falhas de processo",
-      "description": "Quebrou algo? Lotes em ERRO mais lotes parados no meio da carga (RECEBIDO ou CUSTODIADO) há mais de 30 min. Não depende do período: falha aberta continua aberta. Quem age: Engenharia (runbook).",
+      "description": "Quebrou algo? Lotes em ERRO, lotes parados no meio da carga (RECEBIDO ou CUSTODIADO) há mais de 30 min e lotes carregados que a silver não processou (falhou ou está há mais de 30 min sem rodar, D019). Não depende do período: falha aberta continua aberta. Quem age: Engenharia (runbook).",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "nfe"
@@ -132,7 +132,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT count(*) AS falhas\n  FROM ctrl.lote\n WHERE status = 'ERRO'\n    OR (status IN ('RECEBIDO', 'CUSTODIADO') AND recebido_em < now() - interval '30 minutes')"
+          "rawSql": "SELECT count(*) AS falhas\n  FROM ctrl.lote\n WHERE status = 'ERRO'\n    OR (status IN ('RECEBIDO', 'CUSTODIADO') AND recebido_em < now() - interval '30 minutes')\n    OR erro_transformacao IS NOT NULL\n    OR (status IN ('CARREGADO', 'INCOMPLETO') AND transformado_em IS NULL\n        AND carregado_em < now() - interval '30 minutes')"
         }
       ],
       "fieldConfig": {
@@ -725,7 +725,7 @@
           "editorMode": "code",
           "rawQuery": true,
           "format": "table",
-          "rawSql": "SELECT severidade, quem_age, onde, o_que_aconteceu, desde FROM (\n  SELECT 'CRÍTICO' AS severidade, 'Engenharia' AS quem_age, nome_lote AS onde,\n         'falhou: ' || coalesce(mensagem, 'sem mensagem') AS o_que_aconteceu, recebido_em AS desde\n    FROM ctrl.lote WHERE status = 'ERRO'\n  UNION ALL\n  SELECT 'CRÍTICO', 'Engenharia', nome_lote,\n         'parado em ' || status || ' há ' || (extract(epoch FROM now() - recebido_em) / 60)::int || ' min',\n         recebido_em\n    FROM ctrl.lote WHERE status IN ('RECEBIDO', 'CUSTODIADO') AND recebido_em < now() - interval '30 minutes'\n  UNION ALL\n  SELECT 'ATENÇÃO', 'TI do ERP', nome_lote, mensagem, recebido_em\n    FROM ctrl.lote\n   WHERE $__timeFilter(recebido_em) AND (status = 'INCOMPLETO' OR coalesce(qtd_hash_divergente, 0) > 0)\n  UNION ALL\n  SELECT 'ATENÇÃO', 'Fiscal', 'chave ' || chave_acesso,\n         qtd_conteudos || ' XMLs diferentes custodiados para a mesma chave: qual é o válido?', primeiro_em\n    FROM custodia.v_chave_com_conteudos_diferentes WHERE $__timeFilter(ultimo_em)\n) a\nORDER BY severidade = 'CRÍTICO' DESC, desde DESC"
+          "rawSql": "SELECT severidade, quem_age, onde, o_que_aconteceu, desde FROM (\n  SELECT 'CRÍTICO' AS severidade, 'Engenharia' AS quem_age, nome_lote AS onde,\n         'falhou: ' || coalesce(mensagem, 'sem mensagem') AS o_que_aconteceu, recebido_em AS desde\n    FROM ctrl.lote WHERE status = 'ERRO'\n  UNION ALL\n  SELECT 'CRÍTICO', 'Engenharia', nome_lote,\n         'parado em ' || status || ' há ' || (extract(epoch FROM now() - recebido_em) / 60)::int || ' min',\n         recebido_em\n    FROM ctrl.lote WHERE status IN ('RECEBIDO', 'CUSTODIADO') AND recebido_em < now() - interval '30 minutes'\n  UNION ALL\n  SELECT 'CRÍTICO', 'Engenharia', nome_lote, 'silver falhou: ' || erro_transformacao, carregado_em\n    FROM ctrl.lote WHERE erro_transformacao IS NOT NULL\n  UNION ALL\n  SELECT 'CRÍTICO', 'Engenharia', nome_lote,\n         'carregado há ' || (extract(epoch FROM now() - carregado_em) / 60)::int || ' min e fora da silver',\n         carregado_em\n    FROM ctrl.lote\n   WHERE status IN ('CARREGADO', 'INCOMPLETO') AND transformado_em IS NULL AND erro_transformacao IS NULL\n     AND carregado_em < now() - interval '30 minutes'\n  UNION ALL\n  SELECT 'ATENÇÃO', 'TI do ERP', nome_lote, mensagem, recebido_em\n    FROM ctrl.lote\n   WHERE $__timeFilter(recebido_em) AND (status = 'INCOMPLETO' OR coalesce(qtd_hash_divergente, 0) > 0)\n  UNION ALL\n  SELECT 'ATENÇÃO', 'Fiscal', 'chave ' || chave_acesso,\n         qtd_conteudos || ' XMLs diferentes custodiados para a mesma chave: qual é o válido?', primeiro_em\n    FROM custodia.v_chave_com_conteudos_diferentes WHERE $__timeFilter(ultimo_em)\n) a\nORDER BY severidade = 'CRÍTICO' DESC, desde DESC"
         }
       ],
       "fieldConfig": {

@@ -4,10 +4,12 @@ COMPOSE := docker compose
 AF := $(COMPOSE) exec -T airflow-scheduler
 PG := $(COMPOSE) exec -T postgres
 
-.PHONY: help env creds up down clean ps logs urls smoke teste-custodia gerar gerar-sujo carregar carregar-um lotes teste-bronze db-bootstrap psql test lint
+.PHONY: help env creds up down clean ps logs urls smoke teste-custodia gerar gerar-sujo carregar carregar-um lotes teste-bronze silver teste-silver demo aguardar-airflow db-bootstrap psql test lint
 
 DIAS ?= 1
 ARGS ?=
+DIAS_DEMO ?= 7
+DBT := "$$DBT_BIN" build --select +path:models/silver --project-dir "$$DBT_PROJECT_DIR" --profiles-dir "$$DBT_PROFILES_DIR"
 
 help: ## lista os alvos
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -76,10 +78,38 @@ lotes: ## saúde da carga: os últimos lotes em ctrl.v_lote
 	$(PG) psql -U $$(grep -E '^DB_USER=' .env | cut -d= -f2) -d $$(grep -E '^DB_DB=' .env | cut -d= -f2) -c \
 	  "SELECT nome_lote, status, declarado_arquivos AS decl, qtd_arquivos AS receb, qtd_custodiados AS novos, \
 	          qtd_ja_custodiados AS ja, qtd_faltantes AS falt, qtd_hash_divergente AS hash_div, qtd_bronze AS bronze, \
-	          seg_total, mensagem FROM ctrl.v_lote ORDER BY lote_id DESC LIMIT 15"
+	          qtd_validos AS validos, qtd_quarentena AS quar, qtd_reenvios AS reenv, silver_fechada AS fecha, \
+	          seg_total, coalesce(erro_transformacao, mensagem) AS mensagem \
+	     FROM ctrl.v_lote ORDER BY lote_id DESC LIMIT 15"
 
 teste-bronze: ## marco 3 (D003): a bronze é reconstruída do raw com a mesma contagem e o mesmo conteúdo?
 	$(AF) python -m pipelines.carga.reconstruir_bronze
+
+silver: ## marco 4: roda a silver (dbt) e o registro em ctrl, sem a DAG (lotes já na bronze)
+	$(AF) bash -c '$(DBT)'
+	$(AF) python -m pipelines.qualidade.registrar
+
+teste-silver: ## marco 4: confere a silver com o gabarito do gerador (PASSOU/FALHOU por critério)
+	$(AF) python -m pipelines.qualidade.conferir_silver
+
+demo: ## roteiro completo para quem clonou: sobe, gera DIAS_DEMO dias sujos, carrega pela DAG e confere
+	@$(MAKE) --no-print-directory env
+	$(COMPOSE) up -d --build
+	@$(MAKE) --no-print-directory aguardar-airflow
+	@$(MAKE) --no-print-directory gerar-sujo DIAS=$(DIAS_DEMO)
+	@$(MAKE) --no-print-directory carregar
+	$(AF) python -m pipelines.carga.aguardar --timeout 1800
+	@$(MAKE) --no-print-directory lotes
+	@$(MAKE) --no-print-directory teste-silver
+	@echo "Painéis: Grafana > pasta NF-e > 'Saúde da carga' e 'Qualidade do conteúdo'"
+	@$(MAKE) --no-print-directory creds
+
+aguardar-airflow: # interno: scheduler saudável e dag_nfe_saida já registrada (até 5 min)
+	@echo "aguardando o Airflow (o primeiro build leva alguns minutos)..."
+	@for i in $$(seq 1 60); do \
+	   [ "$$($(COMPOSE) ps --format '{{.Health}}' airflow-scheduler 2>/dev/null)" = healthy ] && \
+	   $(AF) airflow dags details dag_nfe_saida >/dev/null 2>&1 && exit 0; sleep 5; done; \
+	 echo "o Airflow não ficou pronto em 5 min: make ps e make logs"; exit 1
 
 db-bootstrap: ## reaplica o DDL em um banco existente (idempotente)
 	$(PG) bash /docker-entrypoint-initdb.d/00_bootstrap.sh
